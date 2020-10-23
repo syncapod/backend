@@ -1,0 +1,16 @@
+CREATE TABLE users (
+	id UUID PRIMARY KEY,
+	email TEXT NOT NULL UNIQUE,
+	username TEXT NOT NULL UNIQUE,
+	birthdate DATE NOT NULL,
+	password_hash BYTEA NOT NULL
+);
+
+CREATE TABLE sessions (
+	id UUID PRIMARY KEY,
+	user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	login_time TIMESTAMPTZ NOT NULL,
+	last_seen_time TIMESTAMPTZ NOT NULL,
+	expires TIMESTAMPTZ NOT NULL,
+	user_agent TEXT NOT NULL
+);
