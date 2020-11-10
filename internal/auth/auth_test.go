@@ -1,229 +1,319 @@
 package auth
 
 import (
+	"context"
+	"errors"
+	"fmt"
+	"log"
+	"os"
 	"reflect"
-	"strings"
 	"testing"
 	"time"
 
-	"github.com/golang/protobuf/ptypes"
-	"github.com/sschwartz96/stockpile/db"
-	"github.com/sschwartz96/stockpile/mock"
-	"github.com/sschwartz96/syncapod/internal/database"
-	"github.com/sschwartz96/syncapod/internal/protos"
-	"github.com/sschwartz96/syncapod/internal/util"
-	"golang.org/x/crypto/bcrypt"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v4/pgxpool"
+	"github.com/sschwartz96/syncapod-backend/internal/db"
 )
 
-func TestHash(t *testing.T) {
-	type args struct {
-		password string
+var (
+	dbpg        *pgxpool.Pool
+	authStore   db.AuthStore
+	oauthStore  db.OAuthStore
+	getTestUser = &db.UserRow{ID: uuid.MustParse("a813c6e3-9cd0-4aed-9c4e-1d88ae20c8ba"), Email: "get@test.auth", Username: "getTestAuth", Birthdate: time.Unix(0, 0).UTC()}
+)
+
+// user TestMain to setup
+func TestMain(m *testing.M) {
+	// connect stop after 5 seconds
+	start := time.Now()
+	fiveSec := time.Second * 5
+	err := errors.New("start loop")
+	for err != nil {
+		if time.Since(start) > fiveSec {
+			log.Fatal(`Could not connect to postgres\n
+				Took longer than 5 seconds, maybe download postgres image`)
+		}
+		dbpg, err = pgxpool.Connect(context.Background(),
+			fmt.Sprintf(
+				"postgres://postgres:secret@localhost:5432/postgres?sslmode=disable",
+			),
+		)
+		time.Sleep(time.Millisecond * 50)
 	}
-	tests := []struct {
-		name string
-		args args
-	}{
-		{
-			name: "one",
-			args: args{password: "password"},
-		},
-		{
-			name: "two",
-			args: args{password: "simplePhraseButVeryLongString"},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := Hash(tt.args.password)
-			if err != nil {
-				t.Errorf("Hash() error = %v", err)
-			}
-			if err = bcrypt.CompareHashAndPassword([]byte(got), []byte(tt.args.password)); err != nil {
-				t.Errorf("Hash() error = %v, did not match hash", err)
-			}
-		})
-	}
+
+	// setup db
+	setupAuthDB()
+
+	// setup store
+	authStore = db.NewAuthStorePG(dbpg)
+	oauthStore = db.NewOAuthStorePG(dbpg)
+
+	// run tests
+	runCode := m.Run()
+
+	os.Exit(runCode)
 }
 
-func TestCompare(t *testing.T) {
+func TestAuthController_Login(t *testing.T) {
+	type fields struct {
+		authStore  db.AuthStore
+		oauthStore db.OAuthStore
+	}
 	type args struct {
-		hash     string
+		ctx      context.Context
+		username string
 		password string
-	}
-	tests := []struct {
-		name string
-		args args
-		want bool
-	}{
-		{
-			name: "correct",
-			args: args{password: "password"},
-			want: true,
-		},
-		{
-			name: "wrong",
-			args: args{password: "simplePhraseButVeryLongString"},
-			want: false,
-		},
-	}
-
-	// generate hashes
-	for i := range tests {
-		var err error
-		tests[i].args.hash, err = Hash(tests[i].args.password)
-		if !tests[i].want {
-			// change password to make sure it doesn't match
-			tests[i].args.password = strings.ToLower(tests[i].args.password)
-		}
-		if err != nil {
-			t.Errorf("TestHash() setup, could not hash password: %v", err)
-		}
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := Compare(tt.args.hash, tt.args.password); got != tt.want {
-				t.Errorf("Compare() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestCreateSession(t *testing.T) {
-	mockDB := mock.CreateDB()
-	type args struct {
-		dbClient     db.Database
-		userID       *protos.ObjectID
-		userAgent    string
-		stayLoggedIn bool
+		agent    string
 	}
 	tests := []struct {
 		name    string
+		fields  fields
 		args    args
-		wantErr bool
-	}{
-		{
-			name: "test1",
-			args: args{
-				dbClient:     mockDB,
-				stayLoggedIn: false,
-				userAgent:    "",
-				userID:       protos.ObjectIDFromHex("userID1"),
-			},
-			wantErr: false,
-		},
-		{
-			name: "test2",
-			args: args{
-				dbClient:     mockDB,
-				stayLoggedIn: true,
-				userAgent:    "testAgent",
-				userID:       protos.ObjectIDFromHex("userID2"),
-			},
-			wantErr: false,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := CreateSession(tt.args.dbClient, tt.args.userID, tt.args.userAgent, tt.args.stayLoggedIn)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("CreateSession() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			var sesh protos.Session
-			err = tt.args.dbClient.FindOne(database.ColSession, &sesh, &db.Filter{"userid": tt.args.userID}, db.CreateOptions())
-			if err != nil {
-				t.Errorf("CreateSession() error = %v, wantErr %v", err, tt.wantErr)
-			}
-			if sesh.SessionKey != got {
-				t.Errorf("CreateSession() error = keys do not match! Found %v, wanted %v", sesh.SessionKey, got)
-			}
-		})
-	}
-}
-
-func TestCreateKey(t *testing.T) {
-	type args struct {
-		l int
-	}
-	tests := []struct {
-		name string
-		args args
-	}{
-		{
-			name: "test1",
-			args: args{
-				l: 64,
-			},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := CreateKey(tt.args.l)
-			if err != nil {
-				t.Errorf("CreateKey() error = %v", err)
-			}
-			if len(got) != tt.args.l {
-				t.Errorf("CreateKey() error = didn't get correct length")
-			}
-		})
-	}
-}
-
-func insertOrFail(t *testing.T, db db.Database, col string, object interface{}) {
-	err := db.Insert(col, object)
-	if err != nil {
-		t.Fatalf("error inserting object into: %s, %v", col, err)
-	}
-}
-
-func TestValidateSession(t *testing.T) {
-	mockDB := mock.CreateDB()
-	user := &protos.User{Id: protos.NewObjectID(), Email: "test@test.org"}
-	insertOrFail(t, mockDB, database.ColUser, user)
-	testSesh1, _ := CreateSession(mockDB, user.Id, "testAgent", true)
-	testSesh2 := &protos.Session{Id: protos.NewObjectID(), SessionKey: "key", Expires: util.AddToTimestamp(ptypes.TimestampNow(), time.Minute*-1), UserID: user.Id}
-	insertOrFail(t, mockDB, database.ColSession, testSesh2)
-
-	type args struct {
-		dbClient db.Database
-		key      string
-	}
-	tests := []struct {
-		name    string
-		args    args
-		want    *protos.User
+		want    *db.UserRow
 		wantErr bool
 	}{
 		{
 			name: "valid",
-			args: args{
-				dbClient: mockDB,
-				key:      testSesh1,
+			args: args{ctx: context.Background(),
+				agent:    "testAgent",
+				password: "pass",
+				username: getTestUser.Username,
 			},
-			want:    user,
+			fields:  fields{authStore: authStore, oauthStore: oauthStore},
+			want:    getTestUser,
 			wantErr: false,
-		},
-		{
-			name: "invalid",
-			args: args{
-				dbClient: mockDB,
-				key:      testSesh2.SessionKey,
-			},
-			want:    nil,
-			wantErr: true,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := ValidateSession(tt.args.dbClient, tt.args.key)
+			a := &AuthController{
+				authStore:  tt.fields.authStore,
+				oauthStore: tt.fields.oauthStore,
+			}
+			got, got1, err := a.Login(tt.args.ctx, tt.args.username, tt.args.password, tt.args.agent)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("ValidateSession() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("AuthController.Login() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("ValidateSession() = %v, want %v", got, tt.want)
+			if !reflect.DeepEqual(got.ID, tt.want.ID) {
+				t.Errorf("AuthController.Login() got = \n%v\n, want \n%v", got, tt.want)
+			}
+			_, err = a.authStore.GetSession(context.Background(), got1.ID)
+			if err != nil {
+				t.Error("AuthController.Login() did not find session in database")
 			}
 		})
+	}
+}
+
+func TestAuthController_Authorize(t *testing.T) {
+	type fields struct {
+		authStore  db.AuthStore
+		oauthStore db.OAuthStore
+	}
+	type args struct {
+		ctx       context.Context
+		sessionID uuid.UUID
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		want    *db.UserRow
+		wantErr bool
+	}{
+		{
+			name:    "valid",
+			args:    args{ctx: context.Background(), sessionID: uuid.MustParse("a813c6e3-9cd0-4aed-9c4e-1d87ae20c111")},
+			fields:  fields{authStore: authStore, oauthStore: oauthStore},
+			want:    getTestUser,
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a := &AuthController{
+				authStore:  tt.fields.authStore,
+				oauthStore: tt.fields.oauthStore,
+			}
+			got, err := a.Authorize(tt.args.ctx, tt.args.sessionID)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("AuthController.Authorize() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got.ID, tt.want.ID) {
+				t.Errorf("AuthController.Authorize() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestAuthController_Logout(t *testing.T) {
+	type fields struct {
+		authStore  db.AuthStore
+		oauthStore db.OAuthStore
+	}
+	type args struct {
+		ctx       context.Context
+		sessionID uuid.UUID
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		wantErr bool
+	}{
+		{
+			name:    "valid",
+			args:    args{ctx: context.Background(), sessionID: uuid.MustParse("a813c6e3-9cd0-4aed-9c4e-1d87ae20c222")},
+			fields:  fields{authStore: authStore, oauthStore: oauthStore},
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a := &AuthController{
+				authStore:  tt.fields.authStore,
+				oauthStore: tt.fields.oauthStore,
+			}
+			if err := a.Logout(tt.args.ctx, tt.args.sessionID); (err != nil) != tt.wantErr {
+				t.Errorf("AuthController.Logout() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			// make sure session is removed
+			_, err := authStore.GetSession(context.Background(), tt.args.sessionID)
+			if err == nil {
+				t.Errorf("AuthController.Logout() session still found within database")
+			}
+		})
+	}
+}
+
+func TestAuthController_findUserByEmailOrUsername(t *testing.T) {
+	type fields struct {
+		authStore  db.AuthStore
+		oauthStore db.OAuthStore
+	}
+	type args struct {
+		ctx context.Context
+		u   string
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		want    *db.UserRow
+		wantErr bool
+	}{
+		{
+			name:    "valid",
+			args:    args{ctx: context.Background(), u: getTestUser.Username},
+			fields:  fields{authStore: authStore, oauthStore: oauthStore},
+			want:    getTestUser,
+			wantErr: false,
+		},
+		{
+			name:    "valid",
+			args:    args{ctx: context.Background(), u: getTestUser.Email},
+			fields:  fields{authStore: authStore, oauthStore: oauthStore},
+			want:    getTestUser,
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a := &AuthController{
+				authStore:  tt.fields.authStore,
+				oauthStore: tt.fields.oauthStore,
+			}
+			got, err := a.findUserByEmailOrUsername(tt.args.ctx, tt.args.u)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("AuthController.findUserByEmailOrUsername() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got.ID, tt.want.ID) {
+				t.Errorf("AuthController.findUserByEmailOrUsername() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func setupAuthDB() {
+	// test users
+	getTestUser.PasswordHash = []byte("$2a$10$rUH2xp2xIt3ASkdpvH7duugL//F.HsqP58DKvcAAnTmXRWM0fSiRS")
+	insertUser(getTestUser)
+	getTestUser.PasswordHash = nil
+
+	updateUser := &db.UserRow{ID: uuid.MustParse("b813c6e3-9cd0-4aed-9c4e-1d88ae20c8ba"), Email: "update@test.auth", Username: "updateAuth", Birthdate: time.Unix(10001, 0).UTC(), PasswordHash: []byte("pass")}
+	insertUser(updateUser)
+	updatePassUser := &db.UserRow{ID: uuid.MustParse("c813c6e3-9cd0-4aed-9c4e-1d88ae20c8ba"), Email: "updatePass@test.auth", Username: "updatePassAuth", Birthdate: time.Unix(10002, 0).UTC(), PasswordHash: []byte("pass")}
+	insertUser(updatePassUser)
+	deleteUser := &db.UserRow{ID: uuid.MustParse("d813c6e3-9cd0-4aed-9c4e-1d88ae20c8ba"), Email: "delete@test.auth", Username: "deleteAuth", Birthdate: time.Unix(10002, 0).UTC(), PasswordHash: []byte("pass")}
+	insertUser(deleteUser)
+
+	// test sessions
+	getSesh := &db.SessionRow{ID: uuid.MustParse("a813c6e3-9cd0-4aed-9c4e-1d87ae20c111"), UserID: uuid.MustParse("a813c6e3-9cd0-4aed-9c4e-1d88ae20c8ba"),
+		Expires: time.Now().Add(time.Hour), LastSeenTime: time.Unix(1000, 0), LoginTime: time.Unix(1000, 0), UserAgent: "testAgent"}
+	insertSession(getSesh)
+	updateSesh := &db.SessionRow{ID: uuid.MustParse("b813c6e3-9cd0-4aed-9c4e-1d87ae20c111"), UserID: uuid.MustParse("a813c6e3-9cd0-4aed-9c4e-1d88ae20c8ba"),
+		Expires: time.Unix(1000, 0), LastSeenTime: time.Unix(1000, 0), LoginTime: time.Unix(1000, 0), UserAgent: "testAgent"}
+	insertSession(updateSesh)
+	deleteSesh := &db.SessionRow{ID: uuid.MustParse("a813c6e3-9cd0-4aed-9c4e-1d87ae20c222"), UserID: uuid.MustParse("a813c6e3-9cd0-4aed-9c4e-1d88ae20c8ba"),
+		Expires: time.Unix(1000, 0), LastSeenTime: time.Unix(1000, 0), LoginTime: time.Unix(1000, 0), UserAgent: "testAgent"}
+	insertSession(deleteSesh)
+
+	// test auth codes
+	gc, _ := DecodeKey("get_code")
+	getAuth := &db.AuthCodeRow{Code: gc, ClientID: "get_client", Scope: "get_scope", UserID: uuid.MustParse("a813c6e3-9cd0-4aed-9c4e-1d88ae20c8ba"), Expires: time.Now().Add(time.Minute * 5)}
+	insertAuthCode(getAuth)
+	ec, _ := DecodeKey("expired_code")
+	expiredAuth := &db.AuthCodeRow{Code: ec, ClientID: "client", Scope: "scope", UserID: uuid.MustParse("a813c6e3-9cd0-4aed-9c4e-1d88ae20c8ba"), Expires: time.Now().Add(time.Minute * -5)}
+	insertAuthCode(expiredAuth)
+	dc, _ := DecodeKey("delete_code")
+	deleteAuth := &db.AuthCodeRow{Code: dc, ClientID: "client", Scope: "scope", UserID: uuid.MustParse("a813c6e3-9cd0-4aed-9c4e-1d88ae20c8ba"), Expires: time.Now().Add(time.Minute * 5)}
+	insertAuthCode(deleteAuth)
+
+	// test access tokens
+	tk, _ := DecodeKey("token")
+	rk, _ := DecodeKey("rftoken")
+	getAccessByRefresh := &db.AccessTokenRow{AuthCode: gc, Created: time.Now(), Expires: 3600, RefreshToken: rk, Token: tk, UserID: uuid.MustParse("a813c6e3-9cd0-4aed-9c4e-1d88ae20c8ba")}
+	insertAccessToken(getAccessByRefresh)
+	dtk, _ := DecodeKey("del_token")
+	drk, _ := DecodeKey("del_rftoken")
+	deleteToken := &db.AccessTokenRow{AuthCode: gc, Created: time.Unix(1000, 0), Expires: 3600, RefreshToken: drk, Token: dtk, UserID: uuid.MustParse("a813c6e3-9cd0-4aed-9c4e-1d88ae20c8ba")}
+	insertAccessToken(deleteToken)
+}
+
+func insertUser(u *db.UserRow) {
+	_, err := dbpg.Exec(context.Background(),
+		"INSERT INTO users (id,email,username,birthdate,password_hash) VALUES($1,$2,$3,$4,$5)",
+		u.ID, u.Email, u.Username, u.Birthdate, u.PasswordHash)
+	if err != nil {
+		log.Fatalln("insertUser() error:", err)
+	}
+}
+
+func insertSession(s *db.SessionRow) {
+	_, err := dbpg.Exec(context.Background(),
+		"INSERT INTO sessions (id,user_id,login_time,last_seen_time,expires,user_agent) VALUES($1,$2,$3,$4,$5,$6)",
+		s.ID, s.UserID, s.LoginTime, s.LastSeenTime, s.Expires, s.UserAgent)
+	if err != nil {
+		log.Fatalln("insertSession() error:", err)
+	}
+}
+
+func insertAuthCode(a *db.AuthCodeRow) {
+	_, err := dbpg.Exec(context.Background(),
+		"INSERT INTO AuthCodes (code,client_id,user_id,scope,expires) VALUES($1,$2,$3,$4,$5)",
+		&a.Code, &a.ClientID, &a.UserID, &a.Scope, &a.Expires)
+	if err != nil {
+		log.Fatalln("insertAuthCode() error:", err)
+	}
+}
+func insertAccessToken(a *db.AccessTokenRow) {
+	_, err := dbpg.Exec(context.Background(),
+		"INSERT INTO AccessTokens (token,auth_code,refresh_token,user_id,created,expires) VALUES($1,$2,$3,$4,$5,$6)",
+		&a.Token, &a.AuthCode, &a.RefreshToken, &a.UserID, &a.Created, &a.Expires)
+	if err != nil {
+		log.Fatalln("insertAccessToken() error:", err)
 	}
 }

@@ -1,90 +1,132 @@
 package auth
 
-// CreateAuthorizationCode creates and saves an authorization code with the client & user id
-//func CreateAuthorizationCode(dbClient db.Database, userID *protos.ObjectID, clientID string) (*models.AuthCode, error) {
-//	key, err := CreateKey(64)
-//	if err != nil {
-//		return nil, fmt.Errorf("CreateAuthorizationCode() error creating key: %v", err)
-//	}
-//	code := models.AuthCode{
-//		Code:     key,
-//		ClientID: clientID,
-//		UserID:   userID,
-//		Scope:    models.SubScope,
-//	}
-//
-//	err = dbClient.Insert(database.ColAuthCode, &code)
-//	if err != nil {
-//		return nil, fmt.Errorf("CreateAuthorizationCode() error inserting auth code: %v", err)
-//	}
-//
-//	return &code, nil
-//}
-//
-//// CreateAccessToken creates and saves an access token with a year of validity
-//func CreateAccessToken(dbClient db.Database, authCode *models.AuthCode) (*models.AccessToken, error) {
-//	tokenString, err := CreateKey(64)
-//	if err != nil {
-//		return nil, fmt.Errorf("error creating access token: %v", err)
-//	}
-//	refreshTokenString, err := CreateKey(64)
-//	if err != nil {
-//		return nil, fmt.Errorf("error creating access token: %v", err)
-//	}
-//	token := models.AccessToken{
-//		AuthCode:     authCode.Code,
-//		Token:        tokenString,
-//		RefreshToken: refreshTokenString,
-//		UserID:       authCode.UserID,
-//		Created:      time.Now(),
-//		Expires:      3600,
-//	}
-//
-//	if err := dbClient.Insert(database.ColAccessToken, token); err != nil {
-//		return nil, fmt.Errorf("error creating access token: %v", err)
-//	}
-//
-//	return &token, nil
-//}
-//
-//// ValidateAuthCode takes pointer to db client and code string, finds the code and returns it
-//func ValidateAuthCode(dbClient db.Database, code string) (*models.AuthCode, error) {
-//	var authCode models.AuthCode
-//	err := dbClient.FindOne(database.ColAuthCode, &authCode, &db.Filter{"code": code}, nil)
-//	if err != nil {
-//		return nil, fmt.Errorf("ValidateAuthCode() error finding auth code: %v", err)
-//	}
-//	if authCode.Code == "" {
-//		return nil, errors.New("not found")
-//	}
-//	return &authCode, nil
-//}
-//
-//// ValidateAccessToken takes pointer to dbclient and token string to lookup and validate AccessToken
-//func ValidateAccessToken(dbClient db.Database, token string) (*protos.User, error) {
-//	var tokenObj models.AccessToken
-//	err := dbClient.FindOne(database.ColAccessToken, &tokenObj, &db.Filter{"token": token}, nil)
-//	if err != nil {
-//		return nil, err
-//	}
-//
-//	// if expired
-//	if tokenObj.Created.Add(time.Second * time.Duration(tokenObj.Expires)).Before(time.Now()) {
-//		return nil, errors.New("expired access token")
-//	}
-//
-//	u, err := user.FindUserByID(dbClient, tokenObj.UserID)
-//	if err != nil {
-//		return nil, err
-//	}
-//
-//	return u, nil
-//}
-//
-//func DeleteOauthAccessToken(dbClient db.Database, token string) error {
-//	err := dbClient.Delete(database.ColAccessToken, &db.Filter{"token": token})
-//	if err != nil {
-//		return fmt.Errorf("error deleting oauth access token: %v", err)
-//	}
-//	return nil
-//}
+import (
+	"context"
+	"crypto/rand"
+	"encoding/base64"
+	"errors"
+	"fmt"
+	"log"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/sschwartz96/syncapod-backend/internal/db"
+)
+
+// CreateAuthCode creates and saves an authorization code with the client & user id
+func (a *AuthController) CreateAuthCode(ctx context.Context, userID uuid.UUID, clientID string) (*db.AuthCodeRow, error) {
+	key, err := createKey(64)
+	if err != nil {
+		return nil, fmt.Errorf("CreateAuthorizationCode() error creating key: %v", err)
+	}
+	code := &db.AuthCodeRow{
+		Code:     key,
+		ClientID: clientID,
+		UserID:   userID,
+		Scope:    db.ReadChange,
+		Expires:  time.Now().Add(time.Minute * 5),
+	}
+	err = a.oauthStore.InsertAuthCode(ctx, code)
+	if err != nil {
+		return nil, fmt.Errorf("AuthController.CreateAuthorizationCode() error inserting auth code: %v", err)
+	}
+	return code, nil
+}
+
+// CreateAccessToken creates and saves an access token with a year of validity
+func (a *AuthController) CreateAccessToken(ctx context.Context, authCode *db.AuthCodeRow) (*db.AccessTokenRow, error) {
+	tokenString, err := createKey(64)
+	if err != nil {
+		return nil, fmt.Errorf("AuthController.CreateAccessToken() error creating access token: %v", err)
+	}
+	refreshTokenString, err := createKey(64)
+	if err != nil {
+		return nil, fmt.Errorf("AuthController.CreateAccessToken() error creating access token: %v", err)
+	}
+	token := &db.AccessTokenRow{
+		AuthCode:     authCode.Code,
+		Token:        tokenString,
+		RefreshToken: refreshTokenString,
+		UserID:       authCode.UserID,
+		Created:      time.Now(),
+		Expires:      3600,
+	}
+	if err := a.oauthStore.InsertAccessToken(ctx, token); err != nil {
+		return nil, fmt.Errorf("AuthController.CreateAccessToken() error inserting access token: %v", err)
+	}
+	return token, nil
+}
+
+// ValidateAuthCode takes in auth and queries db for
+func (a *AuthController) ValidateAuthCode(ctx context.Context, code string) (*db.AuthCodeRow, error) {
+	decodedCode, err := DecodeKey(code)
+	if err != nil {
+		return nil, fmt.Errorf("AuthController.ValidateAuthCode() error decoding code: %v", err)
+	}
+	authCode, err := a.oauthStore.GetAuthCode(ctx, decodedCode)
+	if err != nil {
+		return nil, fmt.Errorf("AuthController.ValidateAuthCode() error finding auth code: %v", err)
+	}
+	if authCode.Expires.Before(time.Now()) {
+		return nil, fmt.Errorf("AuthController.ValidateAuthCode() error auth code expired")
+	}
+	return authCode, nil
+}
+
+// ValidateAccessToken takes pointer to dbclient and token string to lookup and validate AccessToken
+func (a *AuthController) ValidateAccessToken(ctx context.Context, token string) (*db.UserRow, error) {
+	decodedTkn, err := DecodeKey(token)
+	if err != nil {
+		return nil, fmt.Errorf("AuthController.ValidateAccessToken() error decoding key: %v", err)
+	}
+	user, tkn, err := a.oauthStore.GetAccessTokenAndUser(ctx, decodedTkn)
+	if err != nil {
+		return nil, fmt.Errorf("AuthController.ValidateAccessToken() error finding token: %v", err)
+	}
+	// if expired
+	if time.Now().After(tkn.Created.Add(time.Second * time.Duration(tkn.Expires))) {
+		return nil, errors.New("AuthController.ValidateAccessToken() error: expired access token")
+	}
+	user.PasswordHash = []byte{}
+	return user, nil
+}
+
+// ValidateRefreshToken takes in a refresh token, looks up access token and returns it.
+// Deletes the access token
+// returns error if refresh token is invalid
+func (a *AuthController) ValidateRefreshToken(ctx context.Context, token string) (*db.AccessTokenRow, error) {
+	decodedTkn, err := DecodeKey(token)
+	if err != nil {
+		return nil, fmt.Errorf("AuthController.ValidateRefreshToken() error decoding key: %v", err)
+	}
+	accesTkn, err := a.oauthStore.GetAccessTokenByRefresh(ctx, decodedTkn)
+	if err != nil {
+		return nil, fmt.Errorf("AuthController.ValidateRefreshToken() error finding access token: %v", err)
+	}
+	go func() {
+		err = a.oauthStore.DeleteAccessToken(ctx, accesTkn.Token)
+		if err != nil {
+			log.Printf("AuthController.ValidateRefreshToken error deleting access token: %v\n", err)
+		}
+	}()
+	return accesTkn, nil
+}
+
+// createKey takes in a key length and returns base64 encoding
+// of a crypo-rand generated byte sequence
+func createKey(l int) ([]byte, error) {
+	key := make([]byte, l)
+	_, err := rand.Read(key)
+	if err != nil {
+		return nil, fmt.Errorf("createKey(): error creating random key: %v", err)
+	}
+	return key, nil
+}
+
+func EncodeKey(key []byte) string {
+	return base64.URLEncoding.EncodeToString(key)
+}
+
+func DecodeKey(key string) ([]byte, error) {
+	return base64.URLEncoding.DecodeString(key)
+}

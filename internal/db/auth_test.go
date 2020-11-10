@@ -4,42 +4,27 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
-	"path/filepath"
 	"reflect"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v4/pgxpool"
-	"github.com/ory/dockertest"
 )
 
-var db *pgxpool.Pool
+var (
+	db        *pgxpool.Pool
+	getUserID = uuid.MustParse("c724c6e3-9cd0-4aed-9c4e-1d88ae20c8ba")
+)
 
 // user TestMain to setup
 func TestMain(m *testing.M) {
-	// connect to docker pool
-	pool, err := dockertest.NewPool("")
-	if err != nil {
-		log.Fatalf("Could not connect to docker: %v", err)
-	}
-
-	// startup docker container
-	resource, err := pool.Run("postgres", "", []string{"POSTGRES_PASSWORD=secret"})
-	if err != nil {
-		log.Fatalf("Could not start docker resource: %v", err)
-	}
-
 	// connect stop after 5 seconds
 	start := time.Now()
 	fiveSec := time.Second * 5
-	port := resource.GetPort("5432/tcp")
-	log.Println("port connected:", port)
-	err = errors.New("start loop")
+	err := errors.New("start loop")
 	for err != nil {
 		if time.Since(start) > fiveSec {
 			log.Fatal(`Could not connect to postgres\n
@@ -47,15 +32,11 @@ func TestMain(m *testing.M) {
 		}
 		db, err = pgxpool.Connect(context.Background(),
 			fmt.Sprintf(
-				"postgres://postgres:secret@localhost:%s/postgres?sslmode=disable",
-				port,
+				"postgres://postgres:secret@localhost:5432/postgres?sslmode=disable",
 			),
 		)
 		time.Sleep(time.Millisecond * 250)
 	}
-
-	// run migrations up
-	migrateUp()
 
 	// setup db
 	setupAuthDB()
@@ -63,11 +44,7 @@ func TestMain(m *testing.M) {
 	// run tests
 	runCode := m.Run()
 
-	// cleanup
-	err = pool.Purge(resource)
-	if err != nil {
-		log.Fatalf("Could not purge resource: %v", err)
-	}
+	db.Close()
 
 	os.Exit(runCode)
 }
@@ -123,9 +100,9 @@ func TestAuthStorePG_GetUserByID(t *testing.T) {
 	}{
 		{
 			name:    "valid",
-			args:    args{ctx: context.Background(), id: uuid.MustParse("a813c6e3-9cd0-4aed-9c4e-1d88ae20c8ba")},
+			args:    args{ctx: context.Background(), id: getUserID},
 			fields:  fields{db: db},
-			want:    &UserRow{ID: uuid.MustParse("a813c6e3-9cd0-4aed-9c4e-1d88ae20c8ba"), Email: "get@test.test", Username: "get", Birthdate: time.Unix(0, 0).UTC(), PasswordHash: []byte("pass")},
+			want:    &UserRow{ID: getUserID, Email: "get@test.test", Username: "get", Birthdate: time.Unix(0, 0).UTC(), PasswordHash: []byte("pass")},
 			wantErr: false,
 		},
 	}
@@ -168,7 +145,7 @@ func TestAuthStorePG_GetUserByEmail(t *testing.T) {
 				email: "get@test.test",
 			},
 			fields:  fields{db: db},
-			want:    &UserRow{ID: uuid.MustParse("a813c6e3-9cd0-4aed-9c4e-1d88ae20c8ba"), Email: "get@test.test", Username: "get", Birthdate: time.Unix(0, 0).UTC(), PasswordHash: []byte("pass")},
+			want:    &UserRow{ID: getUserID, Email: "get@test.test", Username: "get", Birthdate: time.Unix(0, 0).UTC(), PasswordHash: []byte("pass")},
 			wantErr: false,
 		},
 	}
@@ -211,7 +188,7 @@ func TestAuthStorePG_GetUserByUsername(t *testing.T) {
 				username: "get",
 			},
 			fields:  fields{db: db},
-			want:    &UserRow{ID: uuid.MustParse("a813c6e3-9cd0-4aed-9c4e-1d88ae20c8ba"), Email: "get@test.test", Username: "get", Birthdate: time.Unix(0, 0).UTC(), PasswordHash: []byte("pass")},
+			want:    &UserRow{ID: getUserID, Email: "get@test.test", Username: "get", Birthdate: time.Unix(0, 0).UTC(), PasswordHash: []byte("pass")},
 			wantErr: false,
 		},
 	}
@@ -250,7 +227,7 @@ func TestAuthStorePG_UpdateUser(t *testing.T) {
 			name: "valid",
 			args: args{
 				ctx: context.Background(),
-				u:   &UserRow{ID: uuid.MustParse("b813c6e3-9cd0-4aed-9c4e-1d88ae20c8ba"), Email: "update@updated.test", Username: "updated", Birthdate: time.Unix(0, 0).UTC(), PasswordHash: []byte("pass")},
+				u:   &UserRow{ID: uuid.MustParse("b813c6e3-9cd0-4aed-9c4e-1d88ae20c777"), Email: "update@updated.test", Username: "updated", Birthdate: time.Unix(0, 0).UTC(), PasswordHash: []byte("pass")},
 			},
 			fields: fields{db: db},
 		},
@@ -293,7 +270,7 @@ func TestAuthStorePG_UpdateUserPassword(t *testing.T) {
 			name: "valid",
 			args: args{
 				ctx:           context.Background(),
-				id:            uuid.MustParse("c813c6e3-9cd0-4aed-9c4e-1d88ae20c8ba"),
+				id:            uuid.MustParse("c813c6e3-9cd0-4aed-9c4e-1d88ae20c777"),
 				password_hash: []byte("pass_updated"),
 			},
 			fields:  fields{db: db},
@@ -338,7 +315,7 @@ func TestAuthStorePG_DeleteUser(t *testing.T) {
 			name: "valid",
 			args: args{
 				ctx: context.Background(),
-				id:  uuid.MustParse("d813c6e3-9cd0-4aed-9c4e-1d88ae20c8ba"),
+				id:  uuid.MustParse("d813c6e3-9cd0-4aed-9c4e-1d88ae20c777"),
 			},
 			fields:  fields{db: db},
 			wantErr: false,
@@ -378,7 +355,7 @@ func TestAuthStorePG_InsertSession(t *testing.T) {
 			name: "valid",
 			args: args{
 				ctx: context.Background(),
-				s: &SessionRow{ID: uuid.MustParse("a113c6e3-9cd0-4aed-9c4e-1d87ae20c8ba"), UserID: uuid.MustParse("a813c6e3-9cd0-4aed-9c4e-1d88ae20c8ba"),
+				s: &SessionRow{ID: uuid.MustParse("a113c6e3-9cd0-4aed-9c4e-1d87ae20c8ba"), UserID: getUserID,
 					Expires: time.Now(), LastSeenTime: time.Now(), LoginTime: time.Now(), UserAgent: "testAgent"},
 			},
 			fields:  fields{db: db},
@@ -416,7 +393,7 @@ func TestAuthStorePG_GetSession(t *testing.T) {
 			name:   "valid",
 			args:   args{ctx: context.Background(), id: uuid.MustParse("a813c6e3-9cd0-4aed-9c4e-1d87ae20c8ba")},
 			fields: fields{db: db},
-			want: &SessionRow{ID: uuid.MustParse("a813c6e3-9cd0-4aed-9c4e-1d87ae20c8ba"), UserID: uuid.MustParse("a813c6e3-9cd0-4aed-9c4e-1d88ae20c8ba"),
+			want: &SessionRow{ID: uuid.MustParse("a813c6e3-9cd0-4aed-9c4e-1d87ae20c8ba"), UserID: getUserID,
 				Expires: time.Unix(1000, 0), LastSeenTime: time.Unix(1000, 0), LoginTime: time.Unix(1000, 0), UserAgent: "testAgent"},
 			wantErr: false,
 		},
@@ -455,7 +432,7 @@ func TestAuthStorePG_UpdateSession(t *testing.T) {
 		{
 			name: "valid",
 			args: args{ctx: context.Background(),
-				s: &SessionRow{ID: uuid.MustParse("a813c6e3-9cd0-4aed-9c4e-1d87ae20c8bb"), UserID: uuid.MustParse("a813c6e3-9cd0-4aed-9c4e-1d88ae20c8ba"),
+				s: &SessionRow{ID: uuid.MustParse("a813c6e3-9cd0-4aed-9c4e-1d87ae20c8bb"), UserID: getUserID,
 					Expires: time.Unix(1000, 0), LastSeenTime: time.Unix(1000, 0), LoginTime: time.Unix(1000, 0), UserAgent: "testAgentUpdated"},
 			},
 			fields:  fields{db: db},
@@ -518,79 +495,103 @@ func TestAuthStorePG_DeleteSession(t *testing.T) {
 	}
 }
 
-func migrateUp() {
-	// get all migration(up) files
-	files := getMigrateUpFiles()
-
-	// files should be in order because the names start with the number
-	log.Println("migration files:", files)
-	for _, f := range files {
-		sqlCmd, err := ioutil.ReadFile(f)
-		if err != nil {
-			log.Fatalf("could not read from file: %v", err)
-		}
-		c, err := db.Exec(context.Background(), string(sqlCmd))
-		if err != nil {
-			log.Fatalf("could not run migrate command: %s, error: %v", string(sqlCmd), err)
-		}
-		log.Println(c.String())
+func TestAuthStorePG_GetSessionAndUser(t *testing.T) {
+	type fields struct {
+		db *pgxpool.Pool
 	}
-}
-func getMigrateUpFiles() []string {
-	// get working directory
-	wd, err := os.Getwd()
-	if err != nil {
-		log.Fatalf("Could not get working directory: %v", err)
+	type args struct {
+		ctx       context.Context
+		sessionID uuid.UUID
 	}
-	// find the syncapod-backend directory
-	split := strings.SplitAfter(wd, "syncapod-backend")
-	if len(split) != 2 {
-		log.Fatalf("Could not find syncapod-backend directory: %v", err)
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		want    *SessionRow
+		want1   *UserRow
+		wantErr bool
+	}{
+		{
+			name: "valid",
+			args: args{
+				ctx:       context.Background(),
+				sessionID: uuid.MustParse("a813c6e3-9cd0-4aed-9c4e-1d87ae20c8ba")},
+			fields: fields{db: db},
+			want: &SessionRow{
+				ID:           uuid.MustParse("a813c6e3-9cd0-4aed-9c4e-1d87ae20c8ba"),
+				UserID:       getUserID,
+				Expires:      time.Unix(1000, 0),
+				LastSeenTime: time.Unix(1000, 0),
+				LoginTime:    time.Unix(1000, 0),
+				UserAgent:    "testAgent"},
+			want1: &UserRow{ID: getUserID,
+				Email: "get@test.test", Username: "get",
+				Birthdate: time.Unix(0, 0).UTC(), PasswordHash: []byte("pass")},
+			wantErr: false,
+		},
 	}
-	syncapodDir := split[0]
-	// scan files
-	upFiles := []string{}
-	err = filepath.Walk(syncapodDir, func(path string, info os.FileInfo, err error) error {
-		if info.IsDir() {
-			return nil
-		}
-		if strings.Contains(info.Name(), ".up.") && !strings.Contains(info.Name(), ".swp") {
-			upFiles = append(upFiles, filepath.Join(syncapodDir, "migrations", info.Name()))
-		}
-		return nil
-	})
-	return upFiles
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a := &AuthStorePG{
+				db: tt.fields.db,
+			}
+			got, got1, err := a.GetSessionAndUser(tt.args.ctx, tt.args.sessionID)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("AuthStorePG.GetSessionAndUser() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("AuthStorePG.GetSessionAndUser() got =\n%v, want \n%v", got, tt.want)
+			}
+			if !reflect.DeepEqual(got1, tt.want1) {
+				t.Errorf("AuthStorePG.GetSessionAndUser() got1 = \n%v, want \n%v", got1, tt.want1)
+			}
+		})
+	}
 }
 
 func setupAuthDB() {
 	// test users
-	getUser := &UserRow{ID: uuid.MustParse("a813c6e3-9cd0-4aed-9c4e-1d88ae20c8ba"), Email: "get@test.test", Username: "get", Birthdate: time.Unix(10000, 0).UTC(), PasswordHash: []byte("pass")}
+	getUser := &UserRow{ID: getUserID, Email: "get@test.test", Username: "get", Birthdate: time.Unix(10000, 0).UTC(), PasswordHash: []byte("pass")}
 	insertUser(getUser)
-	updateUser := &UserRow{ID: uuid.MustParse("b813c6e3-9cd0-4aed-9c4e-1d88ae20c8ba"), Email: "update@test.test", Username: "update", Birthdate: time.Unix(10001, 0).UTC(), PasswordHash: []byte("pass")}
+	updateUser := &UserRow{ID: uuid.MustParse("b813c6e3-9cd0-4aed-9c4e-1d88ae20c777"), Email: "update@test.test", Username: "update", Birthdate: time.Unix(10001, 0).UTC(), PasswordHash: []byte("pass")}
 	insertUser(updateUser)
-	updatePassUser := &UserRow{ID: uuid.MustParse("c813c6e3-9cd0-4aed-9c4e-1d88ae20c8ba"), Email: "updatePass@test.test", Username: "updatePass", Birthdate: time.Unix(10002, 0).UTC(), PasswordHash: []byte("pass")}
+	updatePassUser := &UserRow{ID: uuid.MustParse("c813c6e3-9cd0-4aed-9c4e-1d88ae20c777"), Email: "updatePass@test.test", Username: "updatePass", Birthdate: time.Unix(10002, 0).UTC(), PasswordHash: []byte("pass")}
 	insertUser(updatePassUser)
-	deleteUser := &UserRow{ID: uuid.MustParse("d813c6e3-9cd0-4aed-9c4e-1d88ae20c8ba"), Email: "delete@test.test", Username: "delete", Birthdate: time.Unix(10002, 0).UTC(), PasswordHash: []byte("pass")}
+	deleteUser := &UserRow{ID: uuid.MustParse("d813c6e3-9cd0-4aed-9c4e-1d88ae20c777"), Email: "delete@test.test", Username: "delete", Birthdate: time.Unix(10002, 0).UTC(), PasswordHash: []byte("pass")}
 	insertUser(deleteUser)
 
 	// test sessions
-	getSesh := &SessionRow{ID: uuid.MustParse("a813c6e3-9cd0-4aed-9c4e-1d87ae20c8ba"), UserID: uuid.MustParse("a813c6e3-9cd0-4aed-9c4e-1d88ae20c8ba"),
+	getSesh := &SessionRow{ID: uuid.MustParse("a813c6e3-9cd0-4aed-9c4e-1d87ae20c8ba"), UserID: getUserID,
 		Expires: time.Unix(1000, 0), LastSeenTime: time.Unix(1000, 0), LoginTime: time.Unix(1000, 0), UserAgent: "testAgent"}
 	insertSession(getSesh)
-	updateSesh := &SessionRow{ID: uuid.MustParse("a813c6e3-9cd0-4aed-9c4e-1d87ae20c8bb"), UserID: uuid.MustParse("a813c6e3-9cd0-4aed-9c4e-1d88ae20c8ba"),
+	updateSesh := &SessionRow{ID: uuid.MustParse("a813c6e3-9cd0-4aed-9c4e-1d87ae20c8bb"), UserID: getUserID,
 		Expires: time.Unix(1000, 0), LastSeenTime: time.Unix(1000, 0), LoginTime: time.Unix(1000, 0), UserAgent: "testAgent"}
 	insertSession(updateSesh)
-	deleteSesh := &SessionRow{ID: uuid.MustParse("a813c6e3-9cd0-4aed-9c4e-1d87ae20c8bc"), UserID: uuid.MustParse("a813c6e3-9cd0-4aed-9c4e-1d88ae20c8ba"),
+	deleteSesh := &SessionRow{ID: uuid.MustParse("a813c6e3-9cd0-4aed-9c4e-1d87ae20c8bc"), UserID: getUserID,
 		Expires: time.Unix(1000, 0), LastSeenTime: time.Unix(1000, 0), LoginTime: time.Unix(1000, 0), UserAgent: "testAgent"}
 	insertSession(deleteSesh)
+
+	// test auth codes
+	getAuth := &AuthCodeRow{Code: []byte("get_code"), ClientID: "get_client", Scope: "get_scope", UserID: getUserID, Expires: time.Unix(0, 1000)}
+	insertAuthCode(getAuth)
+	deleteAuth := &AuthCodeRow{Code: []byte("delete_code"), ClientID: "client", Scope: "scope", UserID: getUserID, Expires: time.Unix(0, 1500)}
+	insertAuthCode(deleteAuth)
+
+	// test access tokens
+	getAccessByRefresh := &AccessTokenRow{AuthCode: []byte("get_code"), Created: time.Unix(1000, 0), Expires: 3600, RefreshToken: []byte("refresh_token"), Token: []byte("refresh_token"), UserID: getUserID}
+	insertAccessToken(getAccessByRefresh)
+	deleteToken := &AccessTokenRow{AuthCode: []byte("get_code"), Created: time.Unix(1000, 0), Expires: 3600, RefreshToken: []byte("asdf"), Token: []byte("delete_token"), UserID: getUserID}
+	insertAccessToken(deleteToken)
 }
 
 func insertUser(u *UserRow) {
 	_, err := db.Exec(context.Background(),
 		"INSERT INTO users (id,email,username,birthdate,password_hash) VALUES($1,$2,$3,$4,$5)",
-		u.ID, u.Email, u.Username, u.Birthdate, u.PasswordHash)
+		&u.ID, &u.Email, &u.Username, &u.Birthdate, &u.PasswordHash)
 	if err != nil {
-		log.Fatalln("insertUser() error:", err)
+		log.Println("db.auth_test.insertUser() id:", u.ID)
+		log.Fatalln("db.auth_test.insertUser() error:", err)
 	}
 }
 
@@ -599,6 +600,23 @@ func insertSession(s *SessionRow) {
 		"INSERT INTO sessions (id,user_id,login_time,last_seen_time,expires,user_agent) VALUES($1,$2,$3,$4,$5,$6)",
 		s.ID, s.UserID, s.LoginTime, s.LastSeenTime, s.Expires, s.UserAgent)
 	if err != nil {
-		log.Fatalln("insertSession() error:", err)
+		log.Fatalln("db.auth_test.insertSession() error:", err)
+	}
+}
+
+func insertAuthCode(a *AuthCodeRow) {
+	_, err := db.Exec(context.Background(),
+		"INSERT INTO AuthCodes (code,client_id,user_id,scope,expires) VALUES($1,$2,$3,$4,$5)",
+		&a.Code, &a.ClientID, &a.UserID, &a.Scope, &a.Expires)
+	if err != nil {
+		log.Fatalln("db.auth_test.insertAuthCode() error:", err)
+	}
+}
+func insertAccessToken(a *AccessTokenRow) {
+	_, err := db.Exec(context.Background(),
+		"INSERT INTO AccessTokens (token,auth_code,refresh_token,user_id,created,expires) VALUES($1,$2,$3,$4,$5,$6)",
+		&a.Token, &a.AuthCode, &a.RefreshToken, &a.UserID, &a.Created, &a.Expires)
+	if err != nil {
+		log.Fatalln("db.auth_test.insertAccessToken() error:", err)
 	}
 }

@@ -1,33 +1,100 @@
 package auth
 
 import (
-	"crypto/rand"
-	"encoding/base64"
-	"errors"
+	"context"
 	"fmt"
+	"strings"
 	"time"
 
-	"github.com/golang/protobuf/ptypes"
+	"github.com/google/uuid"
 	"github.com/sschwartz96/syncapod-backend/internal/db"
-	"go.mongodb.org/mongo-driver/x/mongo/driver/uuid"
 	"golang.org/x/crypto/bcrypt"
 )
+
+type Auth interface {
+	// Syncapod
+	Login(ctx context.Context, username, password, agent string) (*db.UserRow, *db.SessionRow, error)
+	Authorize(ctx context.Context, sessionID uuid.UUID) (*db.UserRow, error)
+	Logout(ctx context.Context, sessionID uuid.UUID) error
+	// OAuth
+	CreateAuthCode(ctx context.Context, userID uuid.UUID, clientID string) (*db.AuthCodeRow, error)
+	CreateAccessToken(ctx context.Context, authCode *db.AuthCodeRow) (*db.AccessTokenRow, error)
+	ValidateAuthCode(ctx context.Context, code string) (*db.AuthCodeRow, error)
+	ValidateAccessToken(ctx context.Context, token string) (*db.UserRow, error)
+	ValidateRefreshToken(ctx context.Context, token string) (*db.AccessTokenRow, error)
+}
 
 type AuthController struct {
 	authStore  db.AuthStore
 	oauthStore db.OAuthStore
 }
 
-type Auth interface {
-	// Syncapod
-	Login()
-	Authorize()
-	Logout()
+func CreateAuthController(aStore db.AuthStore, oStore db.OAuthStore) *AuthController {
+	return &AuthController{authStore: aStore, oauthStore: oStore}
+}
 
-	// OAuth
-	OAuthRequest() // initial req, sends back "grant" auth code
-	OAuthGrant()   // accept granted auth code and return access token
-	OAuthToken()   // read token and send back resource
+// Login queries db for user and validates password.
+// On success, it creates session and inserts into db
+// returns error if user not found or password is invalid
+func (a *AuthController) Login(ctx context.Context, username, password, agent string) (*db.UserRow, *db.SessionRow, error) {
+	user, err := a.findUserByEmailOrUsername(ctx, username)
+	if err != nil {
+		return nil, nil, fmt.Errorf("AuthController.Login() error finding user: %v", err)
+	}
+	if !compare(user.PasswordHash, password) {
+		return nil, nil, fmt.Errorf("AuthController.Login() error incorrect password")
+	}
+	user.PasswordHash = []byte{}
+	session := createSession(user.ID, agent)
+	err = a.authStore.InsertSession(context.Background(), session)
+	if err != nil {
+		return nil, nil, fmt.Errorf("AuthController.Login() error inserting new session: %v", err)
+	}
+	return user, session, nil
+}
+
+// Authorize queries db for session via id, validates and returns user info.
+// returns error if the session is not found or invalid
+func (a *AuthController) Authorize(ctx context.Context, sessionID uuid.UUID) (*db.UserRow, error) {
+	session, user, err := a.authStore.GetSessionAndUser(ctx, sessionID)
+	now := time.Now()
+	if err != nil {
+		return nil, fmt.Errorf("AuthController.Authorize() error finding session: %v", err)
+	}
+	if session.Expires.Before(now) {
+		go a.authStore.DeleteSession(context.Background(), sessionID)
+		return nil, fmt.Errorf("AuthController.Authorize() error: session expired")
+	}
+	session.LastSeenTime = now
+	session.Expires = now.Add(time.Hour * 168)
+	go a.authStore.UpdateSession(context.Background(), session)
+	user.PasswordHash = []byte{}
+	return user, nil
+}
+
+func (a *AuthController) Logout(ctx context.Context, sessionID uuid.UUID) error {
+	err := a.authStore.DeleteSession(ctx, sessionID)
+	if err != nil {
+		return fmt.Errorf("AuthController.Logout() error deleting session: %v", err)
+	}
+	return nil
+}
+
+// findUserByEmailOrUsername is a helper method for login
+// takes in string u which could either be an email address or username
+// returns UserRow upon success
+func (a *AuthController) findUserByEmailOrUsername(ctx context.Context, u string) (*db.UserRow, error) {
+	var user *db.UserRow
+	var err error
+	if strings.Contains(u, "@") {
+		user, err = a.authStore.GetUserByEmail(ctx, u)
+	} else {
+		user, err = a.authStore.GetUserByUsername(ctx, u)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return user, nil
 }
 
 // Hash takes pwd string and returns hash type string
@@ -45,96 +112,15 @@ func compare(hash []byte, password string) bool {
 	return bcrypt.CompareHashAndPassword(hash, []byte(password)) == nil
 }
 
-// CreateSession creates a session and stores it into database
-func CreateSession(userID uuid.UUID, userAgent string, stayLoggedIn bool) (string, error) {
-	// determine expires
-	var expires time.Duration
-	if stayLoggedIn {
-		expires = time.Hour * 26280
-	} else {
-		expires = time.Hour
-	}
-
-	// Create key
-	key, err := CreateKey(64)
-	if err != nil {
-		return "", err
-	}
-
-	if userAgent == "" {
-		userAgent = "unknown"
-	}
-
-	// Create Session object
-	session := &protos.Session{
-		Id:           protos.NewObjectID(),
+// createSession creates a session
+func createSession(userID uuid.UUID, agent string) *db.SessionRow {
+	now := time.Now()
+	return &db.SessionRow{
+		ID:           uuid.New(),
 		UserID:       userID,
-		SessionKey:   key,
-		LoginTime:    ptypes.TimestampNow(),
-		LastSeenTime: ptypes.TimestampNow(),
-		Expires:      util.AddToTimestamp(ptypes.TimestampNow(), expires),
-		UserAgent:    userAgent,
+		Expires:      now.Add(time.Hour * 168),
+		LastSeenTime: now,
+		LoginTime:    now,
+		UserAgent:    agent,
 	}
-
-	// Store session in database
-	err = user.UpsertSession(dbClient, session)
-	if err != nil {
-		return "", err
-	}
-
-	return key, nil
-}
-
-// CreateKey takes in a key length and returns base64 encoding
-func CreateKey(l int) (string, error) {
-	key := make([]byte, l)
-	_, err := rand.Read(key)
-	if err != nil {
-		return "", fmt.Errorf("Error creating pseudo-random key: %v", err)
-	}
-	return base64.URLEncoding.EncodeToString(key)[:l], nil
-}
-
-// ValidateSession looks up session key, check if its valid and returns a pointer to the user
-// returns error if the key doesn't exist, or has expired
-func ValidateSession(dbClient db.Database, key string) (*protos.User, error) {
-	// Find the key
-	sesh, err := user.FindSession(dbClient, key)
-	if err != nil {
-		return nil, fmt.Errorf("ValidateSession() error finding session: %v", err)
-	}
-
-	// Check if expired
-	if sesh.Expires.AsTime().Before(time.Now()) {
-		err := user.DeleteSession(dbClient, sesh.Id)
-		if err != nil {
-			return nil, fmt.Errorf("ValidateSession() (session expired) error deleting session: %v", err)
-		}
-		return nil, errors.New("ValidateSession() session expired")
-	}
-
-	// calculate time to add to expiration
-	lastSeen, _ := ptypes.Timestamp(sesh.LastSeenTime)
-	timeToAdd := time.Since(lastSeen)
-
-	sesh.LastSeenTime = ptypes.TimestampNow()
-	util.AddToTimestamp(sesh.Expires, timeToAdd)
-	upsertErr := make(chan error)
-	go func() {
-		upsertErr <- user.UpsertSession(dbClient, sesh)
-	}()
-
-	// Find the user
-	u, err := user.FindUserByID(dbClient, sesh.UserID)
-	if err != nil {
-		return nil, fmt.Errorf("ValidateSession() error finding user: %v", err)
-	}
-
-	// check the upsertErr
-	err = <-upsertErr
-	if err != nil {
-		return nil, fmt.Errorf("ValidateSession() error upsert new session: %v", err)
-	}
-
-	return u, nil
 }

@@ -22,20 +22,24 @@ type AuthStore interface {
 	GetSession(ctx context.Context, id uuid.UUID) (*SessionRow, error)
 	UpdateSession(ctx context.Context, s *SessionRow) error
 	DeleteSession(ctx context.Context, id uuid.UUID) error
+
+	// Both
+	GetSessionAndUser(ctx context.Context, sessionID uuid.UUID) (*SessionRow, *UserRow, error)
 }
 
 type OAuthStore interface {
 	// Auth Code
 	InsertAuthCode(ctx context.Context, a *AuthCodeRow) error
-	GetAuthCode(ctx context.Context, id uuid.UUID) (*AuthCodeRow, error)
-	UpdateAuthCode(ctx context.Context, a *AuthCodeRow) error
-	DeleteAuthCode(ctx context.Context, id uuid.UUID) error
+	GetAuthCode(ctx context.Context, code []byte) (*AuthCodeRow, error)
+	// UpdateAuthCode(ctx context.Context, a *AuthCodeRow) error
+	DeleteAuthCode(ctx context.Context, code []byte) error
 
 	// Access Token
 	InsertAccessToken(ctx context.Context, a *AccessTokenRow) error
-	GetAccessToken(ctx context.Context, id uuid.UUID) (*AccessTokenRow, error)
-	UpdateAccessToken(ctx context.Context, a *AccessTokenRow) error
-	DeleteAccessToken(ctx context.Context, id uuid.UUID) error
+	GetAccessTokenByRefresh(ctx context.Context, refreshToken []byte) (*AccessTokenRow, error)
+	DeleteAccessToken(ctx context.Context, token []byte) error
+
+	GetAccessTokenAndUser(ctx context.Context, token []byte) (*UserRow, *AccessTokenRow, error)
 }
 
 // UserRow contains all user specific information
@@ -58,18 +62,20 @@ type SessionRow struct {
 }
 
 // AuthCode is the authorization code of oauth2.0
+// code is the primary key
 type AuthCodeRow struct {
-	Code     string    `json:"code"`
+	Code     []byte    `json:"code"`
 	ClientID string    `json:"client_id"`
 	UserID   uuid.UUID `json:"user_id"`
 	Scope    Scope     `json:"scope"`
+	Expires  time.Time `json:"expires"`
 }
 
 // AccessToken contains the information to provide user access within oAuth scope
 type AccessTokenRow struct {
-	AuthCode     string    `json:"auth_code"`
-	Token        string    `json:"token"`
-	RefreshToken string    `json:"refresh_token"`
+	Token        []byte    `json:"token"`
+	AuthCode     []byte    `json:"auth_code"`
+	RefreshToken []byte    `json:"refresh_token"`
 	UserID       uuid.UUID `json:"user_id"`
 	Created      time.Time `json:"created"`
 	Expires      int       `json:"expires"`

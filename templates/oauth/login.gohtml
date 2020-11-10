@@ -1,0 +1,36 @@
+<!doctype html>
+
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+
+		<title>syncapod oauth login</title>
+		<link rel="stylesheet" href="https://unpkg.com/purecss@1.0.1/build/pure-min.css" integrity="sha384-oAOxQR6DkCoMliIh8yFnu25d7Eq/PHS21PClpwjOTeU2jRSq11vu66rf90/cZr47" crossorigin="anonymous">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+		<style type="text/css" rel="stylesheet">
+			.wrapper { width: 80%; margin: auto; text-align: center; }
+			input { margin-left: auto !important; margin-right: auto !important;}
+			button { width: 220px; }
+			.incorrect { color: red; }
+		</style>
+	</head>
+
+	<body>
+		<div class="wrapper">
+			<h1>syncapod oauth2.0 login</h1>
+			<form class="pure-form pure-form-stacked" method="post">
+				<fieldset>
+					{{if .}}
+						<p class="incorrect">Incorrect username or password</p>
+					{{end}}
+					<input type="text" placeholder="Enter username or email" name="uname" required>
+					<br/>
+					<input type="password" placeholder="Enter password" name="pass" required>
+					<br/>
+					<button type="submit" class="pure-button pure-button-primary">Login</button>
+				</fieldset>
+			</form>    
+		</div>
+	</body>
+</html>
