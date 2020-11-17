@@ -34,7 +34,7 @@ func TestMain(t *testing.M) {
 	}
 
 	// create controllers
-	authC := auth.CreateAuthController(db.NewAuthStorePG(pg), db.NewOAuthStorePG(pg))
+	authC := auth.NewAuthController(db.NewAuthStorePG(pg), db.NewOAuthStorePG(pg))
 
 	// create handlers
 	oauthHandler, err := createTestOAuthHandler(authC)
@@ -163,9 +163,11 @@ func createTestOAuthHandler(authC auth.Auth) (*OauthHandler, error) {
 }
 
 func setup(pg *pgxpool.Pool) {
-	insertUser(pg, &db.UserRow{ID: uuid.MustParse("b7f85a20-9b8f-47f9-8cee-a553a24f2b6d"),
+	a := db.NewAuthStorePG(pg)
+	insertUser(a, &db.UserRow{ID: uuid.MustParse("b7f85a20-9b8f-47f9-8cee-a553a24f2b6d"),
 		Birthdate: time.Unix(0, 0), Email: "oauthTest@test.com", Username: "oauthTest",
-		PasswordHash: []byte("$2a$10$bAkGU1SFc.oy9jz5/psXweSCqWG6reZr3Tl3oTKAgzBksPKHLG4bS")})
+		PasswordHash: []byte("$2a$10$bAkGU1SFc.oy9jz5/psXweSCqWG6reZr3Tl3oTKAgzBksPKHLG4bS"),
+		Created:      time.Unix(0, 0), LastSeen: time.Unix(0, 0)})
 }
 
 func connectToDB() (*pgxpool.Pool, error) {
@@ -186,10 +188,8 @@ func connectToDB() (*pgxpool.Pool, error) {
 	return pg, nil
 }
 
-func insertUser(pg *pgxpool.Pool, u *db.UserRow) {
-	_, err := pg.Exec(context.Background(),
-		"INSERT INTO users (id,email,username,birthdate,password_hash) VALUES($1,$2,$3,$4,$5)",
-		u.ID, u.Email, u.Username, u.Birthdate, u.PasswordHash)
+func insertUser(a *db.AuthStorePG, u *db.UserRow) {
+	err := a.InsertUser(context.Background(), u)
 	if err != nil {
 		log.Println("insertUser() id:", u.ID)
 		log.Fatalln("insertUser() error:", err)

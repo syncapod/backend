@@ -19,8 +19,8 @@ func NewAuthStorePG(db *pgxpool.Pool) *AuthStorePG {
 // User
 func (a *AuthStorePG) InsertUser(ctx context.Context, u *UserRow) error {
 	_, err := a.db.Exec(ctx,
-		"INSERT INTO Users (id,email,username,birthdate,password_hash) VALUES($1,$2,$3,$4,$5)",
-		u.ID, u.Email, u.Username, u.Birthdate, u.PasswordHash)
+		"INSERT INTO Users (id,email,username,birthdate,password_hash, created, last_seen) VALUES($1,$2,$3,$4,$5,$6,$7)",
+		&u.ID, &u.Email, &u.Username, &u.Birthdate, &u.PasswordHash, &u.Created, &u.LastSeen)
 	if err != nil {
 		return fmt.Errorf("InsertUser() error: %v", err)
 	}
@@ -30,7 +30,7 @@ func (a *AuthStorePG) InsertUser(ctx context.Context, u *UserRow) error {
 func (a *AuthStorePG) GetUserByID(ctx context.Context, id uuid.UUID) (*UserRow, error) {
 	u := &UserRow{}
 	row := a.db.QueryRow(ctx, "SELECT * FROM Users WHERE id=$1", id)
-	err := row.Scan(&u.ID, &u.Email, &u.Username, &u.Birthdate, &u.PasswordHash)
+	err := row.Scan(&u.ID, &u.Email, &u.Username, &u.Birthdate, &u.PasswordHash, &u.Created, &u.LastSeen)
 	if err != nil {
 		return nil, fmt.Errorf("GetUserByID() error: %v", err)
 	}
@@ -40,7 +40,7 @@ func (a *AuthStorePG) GetUserByID(ctx context.Context, id uuid.UUID) (*UserRow, 
 func (a *AuthStorePG) GetUserByEmail(ctx context.Context, email string) (*UserRow, error) {
 	u := &UserRow{}
 	row := a.db.QueryRow(ctx, "SELECT * FROM Users WHERE email=$1", email)
-	err := row.Scan(&u.ID, &u.Email, &u.Username, &u.Birthdate, &u.PasswordHash)
+	err := row.Scan(&u.ID, &u.Email, &u.Username, &u.Birthdate, &u.PasswordHash, &u.Created, &u.LastSeen)
 	if err != nil {
 		return nil, fmt.Errorf("GetUserByEmail() error: %v", err)
 	}
@@ -50,7 +50,7 @@ func (a *AuthStorePG) GetUserByEmail(ctx context.Context, email string) (*UserRo
 func (a *AuthStorePG) GetUserByUsername(ctx context.Context, username string) (*UserRow, error) {
 	u := &UserRow{}
 	row := a.db.QueryRow(ctx, "SELECT * FROM Users WHERE username=$1", username)
-	err := row.Scan(&u.ID, &u.Email, &u.Username, &u.Birthdate, &u.PasswordHash)
+	err := row.Scan(&u.ID, &u.Email, &u.Username, &u.Birthdate, &u.PasswordHash, &u.Created, &u.LastSeen)
 	if err != nil {
 		return nil, fmt.Errorf("GetUserByUsername() error: %v", err)
 	}
@@ -59,8 +59,8 @@ func (a *AuthStorePG) GetUserByUsername(ctx context.Context, username string) (*
 
 func (a *AuthStorePG) UpdateUser(ctx context.Context, u *UserRow) error {
 	_, err := a.db.Exec(ctx,
-		"UPDATE Users SET email=$1,username=$2,birthdate=$3 WHERE id=$4",
-		u.Email, u.Username, u.Birthdate, u.ID)
+		"UPDATE Users SET email=$2,username=$3,birthdate=$4,last_seen=$5 WHERE id=$1",
+		&u.ID, &u.Email, &u.Username, &u.Birthdate, &u.LastSeen)
 	if err != nil {
 		return fmt.Errorf("UpdateUser() error: %v", err)
 	}
@@ -134,7 +134,7 @@ func (a *AuthStorePG) GetSessionAndUser(ctx context.Context, sessionID uuid.UUID
 	)
 	err := result.Scan(
 		&s.ID, &s.UserID, &s.LoginTime, &s.LastSeenTime, &s.Expires, &s.UserAgent,
-		&u.ID, &u.Email, &u.Username, &u.Birthdate, &u.PasswordHash,
+		&u.ID, &u.Email, &u.Username, &u.Birthdate, &u.PasswordHash, &u.Created, &u.LastSeen,
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("GetSessionAndUser() error: %v", err)

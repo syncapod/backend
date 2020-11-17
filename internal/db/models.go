@@ -49,6 +49,8 @@ type UserRow struct {
 	Username     string
 	Birthdate    time.Time
 	PasswordHash []byte
+	Created      time.Time
+	LastSeen     time.Time
 }
 
 // SessionRow contains all session information
@@ -89,3 +91,77 @@ const (
 	Read       Scope = "Read"
 	ReadChange Scope = "ReadChange"
 )
+
+// Podcast contains information and xml struct tags for podcast
+type Podcast struct {
+	// REQUIRED
+	ID          uuid.UUID
+	Title       string
+	Description string
+	ImageURL    string
+	Language    string
+	Category    []int
+	Explicit    string
+	// RECOMMENDED
+	Author     string
+	LinkURL    string
+	OwnerName  string
+	OwnerEmail string
+	// SITUATIONAL
+	Episodic  bool
+	Copyright string
+	Block     bool
+	Complete  bool
+	// RSS/OTHER
+	PubDate  time.Time
+	Keywords string
+	Summary  string
+	RSSURL   string
+}
+
+// Episode holds information about a single episode of a podcast within the rss feed
+type Episode struct {
+	// REQUIRED
+	ID              uuid.UUID
+	Title           string
+	EnclosureURL    string
+	EnclosureLength int64
+	EnclosureType   string
+	// RECOMMENDED
+	PubDate     time.Time
+	Description string
+	Duration    int64
+	LinkURL     string
+	ImageURL    string
+	Explicit    string
+	// SITUATIONAL
+	Episode     int
+	Season      int
+	EpisodeType string
+	//Block       bool
+	// OTHER
+	Summary   string
+	Encoded   string
+	PodcastID uuid.UUID
+}
+
+type Category struct {
+	ID       int
+	Name     string
+	ParentID int
+}
+
+type Subscription struct {
+	UserID        uuid.UUID
+	PodcastID     uuid.UUID
+	CompletedIDs  []uuid.UUID
+	InProgressIDs []uuid.UUID
+}
+
+type UserEpisode struct {
+	UserID       uuid.UUID
+	EpisodeID    uuid.UUID
+	OffsetMillis int64
+	LastSeen     time.Time
+	Played       bool
+}

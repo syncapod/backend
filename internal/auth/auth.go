@@ -29,7 +29,7 @@ type AuthController struct {
 	oauthStore db.OAuthStore
 }
 
-func CreateAuthController(aStore db.AuthStore, oStore db.OAuthStore) *AuthController {
+func NewAuthController(aStore db.AuthStore, oStore db.OAuthStore) *AuthController {
 	return &AuthController{authStore: aStore, oauthStore: oStore}
 }
 
