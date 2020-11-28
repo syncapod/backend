@@ -5,33 +5,57 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
-	"strconv"
-	"strings"
 	"time"
 
+	"github.com/golang-migrate/migrate/v4"
+	_ "github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/sschwartz96/syncapod-backend/internal/auth"
 	"github.com/sschwartz96/syncapod-backend/internal/config"
 	"github.com/sschwartz96/syncapod-backend/internal/db"
 	"github.com/sschwartz96/syncapod-backend/internal/handler"
 	"github.com/sschwartz96/syncapod-backend/internal/podcast"
+	"golang.org/x/crypto/acme/autocert"
 )
 
 func main() {
+	log.Println("Running syncapod")
+
 	// read config
 	cfg, err := readConfig("config.json")
 	if err != nil {
 		log.Fatal("Main() error, could not read config: ", err)
 	}
 
-	log.Println("Running syncapod version: ", cfg.Version)
+	// manage certificate
+	certMan := createCertManager(cfg)
+
+	// setup context
+	ctx, cncFn := context.WithTimeout(context.Background(), time.Second*5)
+	defer cncFn()
 
 	// connect to db
 	log.Println("connecting to db")
-	pgdb, err := pgxpool.Connect(context.Background(), cfg.DbURI)
+
+	pgURI := fmt.Sprintf("postgresql://%s:%s@%s:%d/%s?sslmode=disable",
+		cfg.DbUser, url.QueryEscape(cfg.DbPass), cfg.DbHost, cfg.DbPort, cfg.DbName)
+	log.Println("pgURI:", pgURI)
+	pgdb, err := pgxpool.Connect(ctx, pgURI)
 	if err != nil {
-		log.Fatal("couldn't connect to db: ", err)
+		log.Fatalf("couldn't connect to db: %v", err)
+	}
+
+	// run migrations
+	mig, err := migrate.New("file://"+cfg.MigrationsDir, pgURI)
+	if err != nil {
+		log.Fatalf("couldn't create migrate struct : %v", err)
+	}
+	err = mig.Up()
+	if err != nil && err.Error() != "no change" {
+		log.Fatalf("couldn't run migrations: %v", err)
 	}
 
 	// setup stores
@@ -69,6 +93,7 @@ func main() {
 	go updatePodcasts(rssController)
 
 	log.Println("setting up handlers")
+
 	// setup handler
 	handler, err := handler.CreateHandler(cfg, authController)
 	if err != nil {
@@ -77,24 +102,20 @@ func main() {
 
 	// start server
 	log.Println("starting server")
-	port := strings.TrimSpace(strconv.Itoa(cfg.Port))
-	if cfg.Port == 443 {
-		// setup redirect server
-		go func() {
-			if err = http.ListenAndServe(":80", http.HandlerFunc(redirect)); err != nil {
-				log.Fatalf("redirect server failed %v\n", err)
-			}
-		}()
-
-		err = http.ListenAndServeTLS(":"+port, cfg.CertFile, cfg.KeyFile, handler)
-	} else {
-		err = http.ListenAndServe(":"+port, handler)
-	}
-
+	err = startServer(cfg, certMan, handler)
 	if err != nil {
-		log.Fatal("couldn't not start server:", err)
+		log.Fatalf("server error: %v", err)
 	}
 }
+
+func createCertManager(cfg *config.Config) *autocert.Manager {
+	return &autocert.Manager{
+		Cache:      autocert.DirCache(cfg.CertDir),
+		Prompt:     autocert.AcceptTOS,
+		HostPolicy: autocert.HostWhitelist("syncapod.com", "www.syncapod.com"),
+	}
+}
+
 func updatePodcasts(rssController *podcast.RSSController) {
 	for {
 		err := rssController.UpdatePodcasts()
@@ -105,14 +126,29 @@ func updatePodcasts(rssController *podcast.RSSController) {
 	}
 }
 
-func redirect(res http.ResponseWriter, req *http.Request) {
-	http.Redirect(res, req, "https://syncapod.com"+req.RequestURI, http.StatusMovedPermanently)
-}
-
 func readConfig(path string) (*config.Config, error) {
 	cfgFile, err := os.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("readConfig() error opening file: %v", err)
 	}
 	return config.ReadConfig(cfgFile)
+}
+
+func startServer(cfg *config.Config, a *autocert.Manager, h *handler.Handler) error {
+	// check if we are production
+	if cfg.Production {
+		// run http server to redirect traffic and handle cert renewal
+		go func() {
+			log.Fatal(http.ListenAndServe(":http", a.HTTPHandler(nil)))
+		}()
+		// create server
+		s := &http.Server{
+			Addr:      ":https",
+			TLSConfig: a.TLSConfig(),
+			Handler:   h,
+		}
+		return s.ListenAndServeTLS("", "")
+	} else {
+		return http.ListenAndServe(fmt.Sprintf(":%d", cfg.Port), h)
+	}
 }

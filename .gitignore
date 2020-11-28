@@ -13,4 +13,6 @@
 
 # just incase if vim is open while committing
 *.swp
+
+*.env
 config.json

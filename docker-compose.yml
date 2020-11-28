@@ -1,0 +1,38 @@
+version: "3.8"
+
+services:
+    db:
+        image: postgres:latest
+        restart: always
+        environment:
+            - POSTGRES_DB=syncapod
+            - POSTGRES_USER=syncapod
+            - POSTGRES_PASSWORD=${db_pass}
+        volumes:
+            - pg-data:/var/lib/postgresql/data
+        networks:
+            - backend
+
+    syncapod:
+        build:
+            context: .
+            target: prod
+        restart: always
+        volumes:
+            - syncapod-data:/syncapod
+        networks:
+            - backend
+        ports:
+            - "80:80"
+            - "443:443"
+        depends_on:
+            - db
+
+volumes:
+    pg-data:
+    syncapod-data:
+
+networks:
+    backend:
+        driver: bridge
+        name: backend

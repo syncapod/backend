@@ -2,21 +2,34 @@ package config
 
 import (
 	"io"
-	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 const mockConfig = `{
-	"version": 0.123,
-	"db_uri": "mongodb+srv://mockdburi",
+	"cert_dir": "/syncapod/cert",
 	"port": 8090,
-	"cert_file": "",
-	"key_file": "",
-	"grpc_port": 50051
+	"grpc_port": 50051,
+	"db_name": "syncapod",
+	"db_user": "syncapod",
+	"db_pass": "syncapod",
+	"db_port": 5432,
+	"production": false
 }`
 
-var mockConfigObj = &Config{Version: 0.123, DbURI: "mongodb+srv://mockdburi", Port: 8090, GRPCPort: 50051}
+var mockConfigObj = &Config{
+	CertDir:       "/syncapod/cert",
+	Port:          8090,
+	GRPCPort:      50051,
+	DbName:        "syncapod",
+	DbUser:        "syncapod",
+	DbPass:        "syncapod",
+	DbPort:        5432,
+	Production:    false,
+	MigrationsDir: "/syncapod/migrations",
+}
 
 func TestReadConfig(t *testing.T) {
 	type args struct {
@@ -38,9 +51,7 @@ func TestReadConfig(t *testing.T) {
 				t.Errorf("ReadConfig() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("ReadConfig() = %v, want %v", got, tt.want)
-			}
+			require.Equal(t, tt.want, got)
 		})
 	}
 }
