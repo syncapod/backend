@@ -14,6 +14,7 @@ const (
 	dbuserDefault        = "syncapod"
 	dbportDefault        = 5432
 	dbnameDefault        = "syncapod"
+	dbhostDefault        = "localhost"
 	migrationsDirDefault = "/syncapod/migrations"
 	portDefault          = 3030
 	grpcPortDefault      = 50051
@@ -41,6 +42,7 @@ func ReadConfig(r io.Reader) (*Config, error) {
 		DbUser:        dbuserDefault,
 		DbPort:        dbportDefault,
 		DbName:        dbnameDefault,
+		DbHost:        dbhostDefault,
 		MigrationsDir: migrationsDirDefault,
 		Port:          portDefault,
 		GRPCPort:      grpcPortDefault,

@@ -27,11 +27,13 @@ type scanner interface {
 func scanPodcastRows(rows pgx.Rows, p []Podcast) ([]Podcast, error) {
 	for rows.Next() {
 		temp := &Podcast{}
-		scanPodcastRow(rows, temp)
+		if err := scanPodcastRow(rows, temp); err != nil {
+			return p, fmt.Errorf("scanPodcastRows() error scanning row: %v", err)
+		}
 		p = append(p, *temp)
 	}
 	if err := rows.Err(); err != nil {
-		return p, fmt.Errorf("FindPodcastsByRange() error while reading: %v", err)
+		return p, fmt.Errorf("scanPodcastRows() error while reading: %v", err)
 	}
 	return p, nil
 }
@@ -41,9 +43,24 @@ func scanPodcastRow(row scanner, p *Podcast) error {
 	return row.Scan(&p.ID, &p.Title, &p.Description, &p.ImageURL, &p.Language, &p.Category, &p.Explicit, &p.Author, &p.LinkURL, &p.OwnerName, &p.OwnerEmail, &p.Episodic, &p.Copyright, &p.Block, &p.Complete, &p.PubDate, &p.Keywords, &p.Summary, &p.RSSURL)
 }
 
+// scanEpisodeRows is helper method that scans mutiple rows in an episode slice
+func scanEpisodeRows(rows pgx.Rows, e []Episode) ([]Episode, error) {
+	for rows.Next() {
+		temp := &Episode{}
+		if err := scanEpisodeRow(rows, temp); err != nil {
+			return e, fmt.Errorf("scanEpisodeRows() error scanning episode row: %v", err)
+		}
+		e = append(e, *temp)
+	}
+	if err := rows.Err(); err != nil {
+		return e, fmt.Errorf("scanEpisodeRows() error while reading: %v", err)
+	}
+	return e, nil
+}
+
 // scanPodcastRow is a helper method to scan row into a podcast struct
 func scanEpisodeRow(row scanner, e *Episode) error {
-	return row.Scan(&e.ID, &e.Title, &e.EnclosureURL, &e.EnclosureLength, &e.EnclosureType, &e.PubDate, &e.Description, &e.Duration, &e.LinkURL, &e.ImageURL, &e.Explicit, &e.Episode, &e.Season, &e.EpisodeType, &e.Summary, &e.Encoded, &e.PodcastID)
+	return row.Scan(&e.ID, &e.Title, &e.EnclosureURL, &e.EnclosureLength, &e.EnclosureType, &e.PubDate, &e.Description, &e.Duration, &e.LinkURL, &e.ImageURL, &e.ImageTitle, &e.Explicit, &e.Episode, &e.Season, &e.EpisodeType, &e.Subtitle, &e.Summary, &e.Encoded, &e.PodcastID)
 }
 
 // Podcast stuff
@@ -103,9 +120,9 @@ func (ps *PodcastStore) SearchPodcasts(ctx context.Context, search string) ([]Po
 // Episode stuff
 
 func (p *PodcastStore) InsertEpisode(ctx context.Context, e *Episode) error {
-	_, err := p.db.Exec(ctx, `INSERT INTO Episodes(id,title,enclosure_url,enclosure_length,enclosure_type,pub_date,description,duration,link_url,image_url,explicit,episode,season,episode_type,summary,encoded,podcast_id)
-		VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
-		&e.ID, &e.Title, &e.EnclosureURL, &e.EnclosureLength, &e.EnclosureType, &e.PubDate, &e.Description, &e.Duration, &e.LinkURL, &e.ImageURL, &e.Explicit, &e.Episode, &e.Season, &e.EpisodeType, &e.Summary, &e.Encoded, &e.PodcastID)
+	_, err := p.db.Exec(ctx, `INSERT INTO Episodes(id,title,enclosure_url,enclosure_length,enclosure_type,pub_date,description,duration,link_url,image_url,image_title,explicit,episode,season,episode_type,subtitle,summary,encoded,podcast_id)
+		VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
+		&e.ID, &e.Title, &e.EnclosureURL, &e.EnclosureLength, &e.EnclosureType, &e.PubDate, &e.Description, &e.Duration, &e.LinkURL, &e.ImageURL, &e.ImageTitle, &e.Explicit, &e.Episode, &e.Season, &e.EpisodeType, &e.Subtitle, &e.Summary, &e.Encoded, &e.PodcastID)
 	if err != nil {
 		return fmt.Errorf("InsertEpisode() error: %v", err)
 	}
@@ -152,6 +169,16 @@ func (p *PodcastStore) FindEpisodeByURL(ctx context.Context, podID uuid.UUID, mp
 	return epi, nil
 }
 
+func (ps *PodcastStore) FindEpisodesByRange(ctx context.Context, podID uuid.UUID, start, end int64) ([]Episode, error) {
+	limit := end - start
+	offset := start
+	rows, err := ps.db.Query(ctx, "SELECT * FROM Episodes ORDER BY pub_date DESC LIMIT $1 OFFSET $2 ", limit, offset)
+	if err != nil {
+		return nil, fmt.Errorf("FindPodcastsByRange() error: %v", err)
+	}
+	return scanEpisodeRows(rows, []Episode{})
+}
+
 func (p *PodcastStore) FindAllCategories(ctx context.Context) ([]Category, error) {
 	cats := []Category{}
 	rows, err := p.db.Query(ctx, "SELECT * FROM Categories")
@@ -177,8 +204,8 @@ func (p *PodcastStore) UpsertUserEpisode(ctx context.Context, userEpi *UserEpiso
 		`INSERT INTO UserEpisodes
 		(user_id,episode_id,offset_millis,last_seen,played)
 		VALUES($1,$2,$3,$4,$5)
-		ON CONFLICT(user_id,episode_id)
-		DO UPDATE SET offset_millis=EXCLUDED.offset_millis,last_seen=EXCLUDED.last_seen,played=EXCLUDED.played`,
+		ON CONFLICT (user_id,episode_id) DO UPDATE
+		SET offset_millis=$3,last_seen=$4,played=$5`,
 		&userEpi.UserID, &userEpi.EpisodeID, &userEpi.OffsetMillis, &userEpi.LastSeen, &userEpi.Played,
 	)
 	if err != nil {
@@ -222,13 +249,63 @@ func (ps *PodcastStore) FindLastPlayed(ctx context.Context, userID uuid.UUID) (*
 		 WHERE u.user_id=$1 ORDER BY u.last_seen DESC`,
 		&userID)
 	err := row.Scan(&userEpi.UserID, &userEpi.EpisodeID, &userEpi.OffsetMillis, &userEpi.LastSeen, &userEpi.Played,
-		&e.ID, &e.Title, &e.EnclosureURL, &e.EnclosureLength, &e.EnclosureType, &e.PubDate, &e.Description, &e.Duration, &e.LinkURL,
-		&e.ImageURL, &e.Explicit, &e.Episode, &e.Season, &e.EpisodeType, &e.Summary, &e.Encoded, &e.PodcastID,
-		&p.ID, &p.Title, &p.Description, &p.ImageURL, &p.Language, &p.Category, &p.Explicit, &p.Author, &p.LinkURL,
-		&p.OwnerName, &p.OwnerEmail, &p.Episodic, &p.Copyright, &p.Block, &p.Complete, &p.PubDate, &p.Keywords, &p.Summary, &p.RSSURL,
+		&e.ID, &e.Title, &e.EnclosureURL, &e.EnclosureLength, &e.EnclosureType, &e.PubDate, &e.Description, &e.Duration, &e.LinkURL, &e.ImageURL, &e.ImageTitle, &e.Explicit, &e.Episode, &e.Season, &e.EpisodeType, &e.Subtitle, &e.Summary, &e.Encoded, &e.PodcastID,
+		&p.ID, &p.Title, &p.Description, &p.ImageURL, &p.Language, &p.Category, &p.Explicit, &p.Author, &p.LinkURL, &p.OwnerName, &p.OwnerEmail, &p.Episodic, &p.Copyright, &p.Block, &p.Complete, &p.PubDate, &p.Keywords, &p.Summary, &p.RSSURL,
 	)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("FindLastUserEpi() error: %v", err)
 	}
 	return userEpi, p, e, nil
+}
+
+// Subscriptions
+
+// scanSubRows is helper method that scans mutiple rows in an Subscription slice
+func scanSubRows(rows pgx.Rows, s []Subscription) ([]Subscription, error) {
+	for rows.Next() {
+		temp := &Subscription{}
+		if err := scanSubRow(rows, temp); err != nil {
+			return s, fmt.Errorf("scanSubRows() error scanning subscription row: %v", err)
+		}
+		s = append(s, *temp)
+	}
+	if err := rows.Err(); err != nil {
+		return s, fmt.Errorf("scanSubRows() error while reading: %v", err)
+	}
+	return s, nil
+}
+
+// scanPodcastRow is a helper method to scan row into a podcast struct
+func scanSubRow(row scanner, s *Subscription) error {
+	return row.Scan(&s.UserID, &s.PodcastID, &s.CompletedIDs, &s.InProgressIDs)
+}
+
+func (ps *PodcastStore) InsertSubscription(ctx context.Context, sub *Subscription) error {
+	_, err := ps.db.Exec(ctx, "INSERT INTO Subscriptions(user_id,podcast_id,completed_ids,in_progress_ids) VALUES($1,$2,$3,$4)",
+		&sub.UserID, &sub.PodcastID, &sub.CompletedIDs, &sub.InProgressIDs)
+	if err != nil {
+		return fmt.Errorf("InsertSubscription() error inserting subscription: %v", err)
+	}
+	return nil
+}
+
+func (ps *PodcastStore) DeleteSubscription(ctx context.Context, uID uuid.UUID, pID uuid.UUID) error {
+	_, err := ps.db.Exec(ctx, "DELETE FROM Subscriptions WHERE user_id=$1 AND podcast_id=$2", uID, pID)
+	if err != nil {
+		return fmt.Errorf("DeleteSubscription() error deleting subscription from db: %v", err)
+	}
+	return nil
+}
+
+func (ps *PodcastStore) FindSubscriptions(ctx context.Context, userID uuid.UUID) ([]Subscription, error) {
+	subs := []Subscription{}
+	rows, err := ps.db.Query(ctx, "SELECT * FROM Subscriptions WHERE user_id=$1", userID)
+	if err != nil {
+		return nil, fmt.Errorf("FindSubscriptions() error querying db")
+	}
+	subs, err = scanSubRows(rows, subs)
+	if err != nil {
+		return nil, fmt.Errorf("FindSubscriptions() error scanning rows")
+	}
+	return subs, nil
 }

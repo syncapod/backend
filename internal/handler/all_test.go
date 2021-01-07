@@ -3,8 +3,6 @@ package handler
 import (
 	"context"
 	"encoding/json"
-	"errors"
-	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http/httptest"
@@ -18,6 +16,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v4/pgxpool"
+	"github.com/sschwartz96/syncapod-backend/internal"
 	"github.com/sschwartz96/syncapod-backend/internal/auth"
 	"github.com/sschwartz96/syncapod-backend/internal/db"
 	"github.com/stretchr/testify/require"
@@ -26,15 +25,17 @@ import (
 var testHandler *Handler
 
 func TestMain(t *testing.M) {
-	log.Println("running testMain")
 	// connect to db
-	pg, err := connectToDB()
+	var pgdb *pgxpool.Pool
+	var dockerCleanFunc func() error
+	var err error
+	pgdb, dockerCleanFunc, err = internal.StartDockerDB("db_auth")
 	if err != nil {
-		log.Fatalf("Handler.TestMain() error: %v", err)
+		log.Fatalf("auth.TestMain() error setting up docker db: %v", err)
 	}
 
 	// create controllers
-	authC := auth.NewAuthController(db.NewAuthStorePG(pg), db.NewOAuthStorePG(pg))
+	authC := auth.NewAuthController(db.NewAuthStorePG(pgdb), db.NewOAuthStorePG(pgdb))
 
 	// create handlers
 	oauthHandler, err := createTestOAuthHandler(authC)
@@ -43,10 +44,19 @@ func TestMain(t *testing.M) {
 	}
 	testHandler = &Handler{oauthHandler: oauthHandler}
 
-	// setup
-	setup(pg)
+	// setup database
+	setup(pgdb)
 
-	os.Exit(t.Run())
+	// run tests
+	runCode := t.Run()
+
+	// cleanup docker container
+	err = dockerCleanFunc()
+	if err != nil {
+		log.Fatalf("grpc.TestMain() error cleaning up docker container: %v", err)
+	}
+
+	os.Exit(runCode)
 }
 
 func Test_Oauth(t *testing.T) {
@@ -88,7 +98,7 @@ func Test_Oauth(t *testing.T) {
 	req = httptest.NewRequest("POST", uri, nil)
 	testHandler.oauthHandler.Authorize(rec, req)
 	res := rec.Result()
-	body, err = ioutil.ReadAll(res.Body)
+	_, err = ioutil.ReadAll(res.Body)
 	if err != nil {
 		t.Fatalf("Test_Oauth() POST authorize error: %v", err)
 	}
@@ -168,24 +178,6 @@ func setup(pg *pgxpool.Pool) {
 		Birthdate: time.Unix(0, 0), Email: "oauthTest@test.com", Username: "oauthTest",
 		PasswordHash: []byte("$2a$10$bAkGU1SFc.oy9jz5/psXweSCqWG6reZr3Tl3oTKAgzBksPKHLG4bS"),
 		Created:      time.Unix(0, 0), LastSeen: time.Unix(0, 0)})
-}
-
-func connectToDB() (*pgxpool.Pool, error) {
-	var pg *pgxpool.Pool
-	// connect to db, stop after 5 seconds
-	start := time.Now()
-	fiveSec := time.Second * 5
-	err := errors.New("start loop")
-	for err != nil {
-		if time.Since(start) > fiveSec {
-			return nil, fmt.Errorf("connectToDB() error: took longer than 5 seconds to connect")
-		}
-		pg, err = pgxpool.Connect(context.Background(),
-			fmt.Sprintf("postgres://postgres:secret@localhost:5432/postgres?sslmode=disable"),
-		)
-		time.Sleep(time.Millisecond * 250)
-	}
-	return pg, nil
 }
 
 func insertUser(a *db.AuthStorePG, u *db.UserRow) {

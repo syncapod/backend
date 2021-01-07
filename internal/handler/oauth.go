@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"net/url"
 	"strings"
@@ -58,13 +59,17 @@ func (h *OauthHandler) ServeHTTP(res http.ResponseWriter, req *http.Request) {
 // Login handles the post and get request of a login page
 func (h *OauthHandler) Login(res http.ResponseWriter, req *http.Request) {
 	if req.Method == http.MethodGet {
-		h.loginTemplate.Execute(res, false)
+		if err := h.loginTemplate.Execute(res, false); err != nil {
+			log.Printf("OauthHandler.Login() error executing loginTemplate: %v\n", err)
+		}
 		return
 	}
 	err := req.ParseForm()
 	if err != nil {
 		fmt.Println("couldn't parse post values: ", err)
-		h.loginTemplate.Execute(res, true)
+		if err := h.loginTemplate.Execute(res, true); err != nil {
+			log.Printf("OauthHandler.Login() error executing loginTemplate: %v\n", err)
+		}
 		return
 	}
 
@@ -72,7 +77,9 @@ func (h *OauthHandler) Login(res http.ResponseWriter, req *http.Request) {
 	password := req.FormValue("pass")
 	_, sesh, err := h.authController.Login(req.Context(), username, password, req.UserAgent())
 	if err != nil {
-		h.loginTemplate.Execute(res, true)
+		if err := h.loginTemplate.Execute(res, true); err != nil {
+			log.Printf("OauthHandler.Login() error executing loginTemplate: %v\n", err)
+		}
 		return
 	}
 
@@ -165,7 +172,7 @@ func (h *OauthHandler) Token(res http.ResponseWriter, req *http.Request) {
 		refreshToken := req.FormValue("refresh_token")
 		accessToken, err := h.authController.ValidateRefreshToken(req.Context(), refreshToken)
 		if err != nil {
-			fmt.Println("couldn't find token based on refresh token: ", err)
+			fmt.Println("OauthHandler.Token() couldn't find token based on refresh token: ", err)
 			sendTokenError(res, "invalid_grant")
 			return
 		}
@@ -198,7 +205,7 @@ func (h *OauthHandler) Token(res http.ResponseWriter, req *http.Request) {
 		ExpiresIn    int    `json:"expires_in"`
 	}
 	tRes := &tokenResponse{
-		AccessToken:  auth.EncodeKey(token.AuthCode),
+		AccessToken:  auth.EncodeKey(token.Token),
 		RefreshToken: auth.EncodeKey(token.RefreshToken),
 		ExpiresIn:    3600,
 	}
@@ -213,7 +220,9 @@ func (h *OauthHandler) Token(res http.ResponseWriter, req *http.Request) {
 	res.Header().Set("Content-Type", "application/json")
 	res.Header().Set("Cache-Control", "no-store")
 	res.Header().Set("Pragma", "no-cache")
-	res.Write(json)
+	if _, err = res.Write(json); err != nil {
+		log.Printf("OauthHandler.Token() error writing response: %v", err)
+	}
 }
 
 func sendTokenError(res http.ResponseWriter, err string) {
@@ -223,5 +232,7 @@ func sendTokenError(res http.ResponseWriter, err string) {
 	errRes := &tokenErrorResponse{err}
 	errResJson, _ := json.Marshal(errRes)
 	res.WriteHeader(http.StatusBadRequest)
-	res.Write(errResJson)
+	if _, err := res.Write(errResJson); err != nil {
+		log.Printf("OauthHandler.Token() error writing response: %v", err)
+	}
 }

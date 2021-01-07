@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -62,12 +63,22 @@ func (a *AuthController) Authorize(ctx context.Context, sessionID uuid.UUID) (*d
 		return nil, fmt.Errorf("AuthController.Authorize() error finding session: %v", err)
 	}
 	if session.Expires.Before(now) {
-		go a.authStore.DeleteSession(context.Background(), sessionID)
+		go func() {
+			err := a.authStore.DeleteSession(context.Background(), sessionID)
+			if err != nil {
+				log.Printf("AuthController.Authorize() error deleting session: %v\n", err)
+			}
+		}()
 		return nil, fmt.Errorf("AuthController.Authorize() error: session expired")
 	}
 	session.LastSeenTime = now
 	session.Expires = now.Add(time.Hour * 168)
-	go a.authStore.UpdateSession(context.Background(), session)
+	go func() {
+		err := a.authStore.UpdateSession(context.Background(), session)
+		if err != nil {
+			log.Printf("AuthController.Authorize() error updating session: %v\n", err)
+		}
+	}()
 	user.PasswordHash = []byte{}
 	return user, nil
 }

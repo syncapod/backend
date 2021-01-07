@@ -27,7 +27,7 @@ CREATE TABLE AuthCodes (
 
 CREATE TABLE AccessTokens (
 	token BYTEA PRIMARY KEY,
-	auth_code BYTEA NOT NULL REFERENCES AuthCodes(code) ON DELETE CASCADE,
+	auth_code BYTEA NOT NULL,
 	refresh_token BYTEA NOT NULL,
 	user_id UUID NOT NULL REFERENCES Users(id) ON DELETE CASCADE,
 	created TIMESTAMPTZ NOT NULL,
@@ -73,6 +73,7 @@ CREATE TABLE Episodes (
 	duration BIGINT,
 	link_url TEXT,
 	image_url TEXT,
+	image_title TEXT,
 	explicit TEXT,
 	-- SITUATIONAL TAGS
 	episode INT,
@@ -80,8 +81,9 @@ CREATE TABLE Episodes (
 	episode_type TEXT, -- Full, Trailer, Bonus
 	--	block BOOLEAN,
 	-- OTHER
+	subtitle TEXT,
 	summary TEXT,
-	encoded TEXT,
+	encoded TEXT, -- this is the <content:encoded> which sometimes contains show notes
 	podcast_id UUID NOT NULL REFERENCES Podcasts(id) ON DELETE CASCADE
 );
 
@@ -92,16 +94,17 @@ CREATE TABLE Categories (
 );
 
 CREATE TABLE Subscriptions (
-	user_id UUID REFERENCES Users(id) ON DELETE CASCADE,
-	podcast_id UUID REFERENCES Podcasts(id) ON DELETE CASCADE,
+	user_id UUID REFERENCES Users(id) ON DELETE CASCADE NOT NULL,
+	podcast_id UUID REFERENCES Podcasts(id) ON DELETE CASCADE NOT NULL,
 	completed_ids UUID[],
 	in_progress_ids UUID[],
 	PRIMARY KEY(user_id,podcast_id)
 );
 
 CREATE TABLE UserEpisodes (
-	user_id UUID NOT NULL REFERENCES Users(id) ON DELETE CASCADE,
-	episode_id UUID NOT NULL REFERENCES Episodes(id) ON DELETE CASCADE,
+	/* CANNOT ADD FOREIGN KEYS BECAUSE OF THEIR UNIQUE CONSTRAINT */
+	user_id UUID NOT NULL,
+	episode_id UUID NOT NULL,
 	offset_millis BIGINT,
 	last_seen TIMESTAMPTZ,
 	played BOOLEAN,

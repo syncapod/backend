@@ -1,13 +1,7 @@
-.PHONY: db migrate run test
+.PHONY: db migrate run test testv test-db coverage protos
 
 db:
 	docker run -d --rm -ti --network host -e POSTGRES_PASSWORD=secret postgres
-
-testdb:
-	docker run -d --rm -ti --name pg_test --network host -e POSTGRES_PASSWORD=secret postgres
-	sleep 1.5 # wait enough time to run migrations
-	migrate  -source file://migrations \
-		-database postgres://postgres:secret@localhost/postgres?sslmode=disable up
 
 migrate:
 	migrate -source file://migrations \
@@ -17,48 +11,28 @@ run:
 	go run ./cmd/main.go
 
 build:
-	go build ./cmd/main.go
+	go build -o syncapod ./cmd/main.go
 
 clean:
-	rm main
+	rm ./syncapod -f
+	go clean -testcache
 
 test:
-	docker run -d --rm -ti --name pg_test --network host -e POSTGRES_PASSWORD=secret postgres
-	sleep 1.5 # wait enough time to run migrations
-	migrate  -source file://migrations \
-		-database postgres://postgres:secret@localhost/postgres?sslmode=disable up
-	go test ./...; docker stop pg_test -t 1
+	go test ./...
 
 testv:
-	docker run -d --rm -ti --name pg_test --network host -e POSTGRES_PASSWORD=secret postgres
-	sleep 1.75 # wait enough time to run migrations
-	migrate  -source file://migrations \
-		-database postgres://postgres:secret@localhost/postgres?sslmode=disable up
-	richgo test ./... -v; docker stop pg_test -t 1
-
-test-db:
-	docker run -d --rm -ti --name pg_test --network host -e POSTGRES_PASSWORD=secret postgres
-	sleep 1.75 # wait enough time to run migrations
-	migrate  -source file://migrations \
-		-database postgres://postgres:secret@localhost/postgres?sslmode=disable up
-	richgo test ./internal/db -v; docker stop pg_test -t 1
-
-test-podcast:
-	docker run -d --rm -ti --name pg_test --network host -e POSTGRES_PASSWORD=secret postgres
-	sleep 1.75 # wait enough time to run migrations
-	migrate  -source file://migrations \
-		-database postgres://postgres:secret@localhost/postgres?sslmode=disable up
-	richgo test ./internal/podcast -v; docker stop pg_test -t 1
+	go test ./... -v
 
 coverage:
-	docker run -d --rm -ti --name pg_test --network host -e POSTGRES_PASSWORD=secret postgres
-	sleep 1.25 # wait enough time to run migrations
-	migrate  -source file://migrations \
-		-database postgres://postgres:secret@localhost/postgres?sslmode=disable up
-	go test ./... -race -cover; docker stop pg_test -t 1
+	go test ./... -cover
+
+deploy:
+	CGO_ENABLED=0 go build -o syncapod ./cmd/main.go 
+	rsync -a ./templates ./migrations ./docker-compose.yml ./LICENSE ./syncapod \
+		root@syncapod.com:/root/syncapod
 
 protos:
-	protoc -I=/home/sam/projects/syncapod/syncapod-protos/ \
+	protoc -I ~/projects/syncapod/syncapod-protos/ \
 		--go_out=internal/protos/ \
 		--go-grpc_out=internal/protos/ \
-		/home/sam/projects/syncapod/syncapod-protos/*
+		~/projects/syncapod/syncapod-protos/*

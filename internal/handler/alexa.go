@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -44,6 +45,13 @@ type AlexaHandler struct {
 	pod  podcast.PodController
 }
 
+func CreateAlexaHandler(auth auth.Auth, podCon *podcast.PodController) *AlexaHandler {
+	return &AlexaHandler{
+		auth: auth,
+		pod:  *podCon,
+	}
+}
+
 // Alexa handles all requests through /api/alexa endpoint
 func (h *AlexaHandler) Alexa(res http.ResponseWriter, req *http.Request) {
 	var resText, directive string
@@ -80,6 +88,7 @@ func (h *AlexaHandler) Alexa(res http.ResponseWriter, req *http.Request) {
 	userObj, err := h.auth.ValidateAccessToken(req.Context(), token)
 	if err != nil {
 		fmt.Println("error validating token: ", err)
+		fmt.Println("token:", token)
 		resText = "Associated account has invalid token, please re-link account in settings."
 	}
 	// we have an error
@@ -153,7 +162,8 @@ func (h *AlexaHandler) Alexa(res http.ResponseWriter, req *http.Request) {
 		pod, epi, resText, offset = h.moveAudio(req.Context(), &aData, false)
 
 	case Pause:
-		audioTokens := strings.Split(aData.Context.AudioPlayer.Token, "-")
+		audioTokens := strings.Split(aData.Context.AudioPlayer.Token, ";")
+		log.Println("audioplayer tkn:", aData.Context.AudioPlayer.Token)
 		if len(audioTokens) > 1 {
 			//podID := uuid.MustParse(audioTokens[1])
 			epiID := uuid.MustParse(audioTokens[2])
@@ -161,7 +171,7 @@ func (h *AlexaHandler) Alexa(res http.ResponseWriter, req *http.Request) {
 			// TODO: handle error better back to user
 			go func() {
 				err := h.pod.PodcastStore.UpsertUserEpisode(
-					req.Context(),
+					context.Background(),
 					&db.UserEpisode{UserID: userObj.ID, EpisodeID: epiID,
 						OffsetMillis: aData.Context.AudioPlayer.OffsetInMilliseconds,
 						Played:       false,
@@ -176,7 +186,7 @@ func (h *AlexaHandler) Alexa(res http.ResponseWriter, req *http.Request) {
 		}
 
 	case Resume:
-		splitID := strings.Split(aData.Context.AudioPlayer.Token, "-")
+		splitID := strings.Split(aData.Context.AudioPlayer.Token, ";")
 		if len(splitID) > 1 {
 			podID := uuid.MustParse(splitID[1])
 			epiID := uuid.MustParse(splitID[2])
@@ -223,10 +233,13 @@ func (h *AlexaHandler) Alexa(res http.ResponseWriter, req *http.Request) {
 			}
 			if offset == 0 {
 				userEpi, err := h.pod.FindUserEpisode(req.Context(), userObj.ID, epi.ID)
+				// either the userEpi was not found or there was an error
 				if err != nil {
+					offset = 0
 					// TODO: handle internal server error
+				} else {
+					offset = userEpi.OffsetMillis
 				}
-				offset = userEpi.OffsetMillis
 			}
 			fmt.Println("offset: ", offset)
 			response = createAudioResponse(directive, userObj.ID.String(),
@@ -256,7 +269,7 @@ func (h *AlexaHandler) moveAudio(ctx context.Context, aData *AlexaData, forward 
 	var offset int64
 	var err error
 
-	audioTokens := strings.Split(aData.Context.AudioPlayer.Token, "-")
+	audioTokens := strings.Split(aData.Context.AudioPlayer.Token, ";")
 	if len(audioTokens) > 1 {
 		pID := uuid.MustParse(audioTokens[1])
 		eID := uuid.MustParse(audioTokens[2])
@@ -367,7 +380,7 @@ func createAudioResponse(directive, userID, text string,
 					AudioItem: AlexaAudioItem{
 						Stream: AlexaStream{
 							URL:                  mp3URL,
-							Token:                userID + "-" + pod.ID.String() + "-" + epi.ID.String(),
+							Token:                userID + ";" + pod.ID.String() + ";" + epi.ID.String(),
 							OffsetInMilliseconds: offset,
 						},
 						Metadata: AlexaMetadata{

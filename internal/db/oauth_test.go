@@ -29,7 +29,7 @@ func TestOAuthStorePG_InsertAuthCode(t *testing.T) {
 				ctx: context.Background(),
 				a:   &AuthCodeRow{Code: []byte("test_code"), ClientID: "test_client", Scope: "test_scope", UserID: getUserID},
 			},
-			fields:  fields{db: testDB},
+			fields:  fields{db: dbpg},
 			wantErr: false,
 		},
 	}
@@ -66,7 +66,7 @@ func TestOAuthStorePG_GetAuthCode(t *testing.T) {
 				ctx:  context.Background(),
 				code: []byte("get_code"),
 			},
-			fields:  fields{db: testDB},
+			fields:  fields{db: dbpg},
 			want:    &AuthCodeRow{Code: []byte("get_code"), ClientID: "get_client", Scope: "get_scope", UserID: getUserID, Expires: time.Unix(0, 1000)},
 			wantErr: false,
 		},
@@ -105,7 +105,7 @@ func TestOAuthStorePG_DeleteAuthCode(t *testing.T) {
 		{
 			name:    "valid",
 			args:    args{ctx: context.Background(), code: []byte("delete_code")},
-			fields:  fields{db: testDB},
+			fields:  fields{db: dbpg},
 			wantErr: false,
 		},
 	}
@@ -145,7 +145,7 @@ func TestOAuthStorePG_InsertAccessToken(t *testing.T) {
 					Token:        []byte("token"),
 					UserID:       getUserID},
 			},
-			fields:  fields{db: testDB},
+			fields:  fields{db: dbpg},
 			wantErr: false,
 		},
 	}
@@ -179,7 +179,7 @@ func TestOAuthStorePG_GetAccessTokenByRefresh(t *testing.T) {
 		{
 			name:    "valid",
 			args:    args{ctx: context.Background(), refreshToken: []byte("refresh_token")},
-			fields:  fields{db: testDB},
+			fields:  fields{db: dbpg},
 			want:    &AccessTokenRow{AuthCode: []byte("get_code"), Created: time.Unix(1000, 0), Expires: 3600, RefreshToken: []byte("refresh_token"), Token: []byte("refresh_token"), UserID: getUserID},
 			wantErr: false,
 		},
@@ -218,7 +218,7 @@ func TestOAuthStorePG_DeleteAccessToken(t *testing.T) {
 		{
 			name:    "valid",
 			args:    args{ctx: context.Background(), token: []byte("delete_token")},
-			fields:  fields{db: testDB},
+			fields:  fields{db: dbpg},
 			wantErr: false,
 		},
 	}
@@ -256,7 +256,7 @@ func TestOAuthStorePG_GetAccessTokenAndUser(t *testing.T) {
 				ctx:   context.Background(),
 				token: []byte("refresh_token"),
 			},
-			fields: fields{db: testDB},
+			fields: fields{db: dbpg},
 			want: &UserRow{ID: getUserID,
 				Email:        "get@test.test",
 				Username:     "get",

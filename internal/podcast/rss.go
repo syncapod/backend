@@ -67,7 +67,7 @@ func (c *RSSController) UpdatePodcasts() error {
 // updatePodcast updates the given podcast via RSS feed
 func (c *RSSController) updatePodcast(pod *db.Podcast) error {
 	// get rss from url
-	rssResp, err := downloadRSS(pod.RSSURL)
+	rssResp, err := DownloadRSS(pod.RSSURL)
 	if err != nil {
 		return fmt.Errorf("updatePodcast() error downloading rss: %v", err)
 	}
@@ -98,29 +98,18 @@ func (c *RSSController) updatePodcast(pod *db.Podcast) error {
 	return nil
 }
 
-// AddNewPodcast takes RSS url and downloads contents inserts the podcast and its episodes into the db
-// returns error if podcast already exists or connection error
-func (c *RSSController) AddNewPodcast(url string) (*uuid.UUID, error) {
+// AddNewPodcast takes RSS url and a reader to the RSS feed and
+// inserts the podcast and its episodes into the db
+// returns error if podcast already exists
+func (c *RSSController) AddNewPodcast(url string, r io.Reader) (*uuid.UUID, error) {
 	// check if podcast already contains that rss url
 	exists := c.podController.DoesPodcastExist(context.Background(), url)
 	if exists {
 		return nil, errors.New("AddNewPodcast() podcast already exists")
 	}
 
-	// attempt to download & parse the podcast rss
-	rssResp, err := downloadRSS(url)
-	if err != nil {
-		return nil, fmt.Errorf("AddNewPodcast() error downloading rss: %v", err)
-	}
-	// defer closing
-	defer func() {
-		err := rssResp.Close()
-		if err != nil {
-			log.Println("AddNewPodcast() error closing rss response:", err)
-		}
-	}()
-
-	rssPod, err := parseRSS(rssResp)
+	// parse rssPod
+	rssPod, err := parseRSS(r)
 	if err != nil {
 		return nil, err
 	}
@@ -140,14 +129,14 @@ func (c *RSSController) AddNewPodcast(url string) (*uuid.UUID, error) {
 			log.Println("AddNewPodcast() couldn't insert episode: ", err)
 		}
 	}
-
 	return &pod.ID, nil
 }
 
-func downloadRSS(url string) (io.ReadCloser, error) {
+func DownloadRSS(url string) (io.ReadCloser, error) {
+	http.DefaultClient.Timeout = time.Second * 5
 	resp, err := http.Get(url)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("DownloadRSS() error: %v", err)
 	}
 	return resp.Body, nil
 }
@@ -278,7 +267,8 @@ type rssItem struct {
 	Episode     string `xml:"episode"`
 	Season      string `xml:"season"`
 	Image       struct {
-		Href string `xml:"href,attr"`
+		Href  string `xml:"href,attr"`
+		Title string `xml:"title,attr"`
 	} `xml:"image"`
 	Duration string `xml:"duration"`
 	Explicit string `xml:"explicit"`
@@ -350,11 +340,13 @@ func rssItemToDBEpisode(r *rssItem, podID uuid.UUID) *db.Episode {
 		Duration:        duration,
 		LinkURL:         r.Link,
 		ImageURL:        r.Image.Href,
+		ImageTitle:      r.Image.Title,
 		Explicit:        r.Explicit,
 		Episode:         episode,
 		Season:          season,
 		EpisodeType:     r.EpisodeType,
 		Summary:         r.Summary,
+		Subtitle:        r.Subtitle,
 		Encoded:         r.Encoded,
 		PodcastID:       podID,
 	}

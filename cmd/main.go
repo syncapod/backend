@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/golang-migrate/migrate/v4"
@@ -16,6 +18,7 @@ import (
 	"github.com/sschwartz96/syncapod-backend/internal/auth"
 	"github.com/sschwartz96/syncapod-backend/internal/config"
 	"github.com/sschwartz96/syncapod-backend/internal/db"
+	sGRPC "github.com/sschwartz96/syncapod-backend/internal/grpc"
 	"github.com/sschwartz96/syncapod-backend/internal/handler"
 	"github.com/sschwartz96/syncapod-backend/internal/podcast"
 	"golang.org/x/crypto/acme/autocert"
@@ -72,22 +75,23 @@ func main() {
 	rssController := podcast.NewRSSController(podController)
 
 	// setup & start gRPC server
-	//	grpcServer := sGRPC.NewServer(cfg, dbClient,
-	//		services.NewAuthService(dbClient),
-	//		services.NewPodcastService(dbClient),
-	//	)
-	//	go func() {
-	//		// setup listener
-	//		grpcListener, err := net.Listen("tcp", ":"+strconv.Itoa(cfg.GRPCPort))
-	//		if err != nil {
-	//			log.Fatalf("could not listen on port %d, err: %v", cfg.GRPCPort, err)
-	//		}
-	//		// start server
-	//		err = grpcServer.Start(grpcListener)
-	//		if err != nil {
-	//			log.Fatal(err)
-	//		}
-	//	}()
+	grpcServer := sGRPC.NewServer(certMan,
+		authController,
+		sGRPC.NewAuthService(authController),
+		sGRPC.NewPodcastService(podController),
+	)
+	go func() {
+		// setup listener
+		grpcListener, err := net.Listen("tcp", ":"+strconv.Itoa(cfg.GRPCPort))
+		if err != nil {
+			log.Fatalf("main.grpc could not listen on port %d, err: %v", cfg.GRPCPort, err)
+		}
+		// start server
+		err = grpcServer.Start(grpcListener)
+		if err != nil {
+			log.Fatalf("main.grpc error starting server: %v", err)
+		}
+	}()
 
 	// start updating podcasts
 	go updatePodcasts(rssController)
@@ -95,7 +99,7 @@ func main() {
 	log.Println("setting up handlers")
 
 	// setup handler
-	handler, err := handler.CreateHandler(cfg, authController)
+	handler, err := handler.CreateHandler(cfg, authController, podController)
 	if err != nil {
 		log.Fatal("could not setup handlers: ", err)
 	}
@@ -106,14 +110,18 @@ func main() {
 	if err != nil {
 		log.Fatalf("server error: %v", err)
 	}
+
 }
 
 func createCertManager(cfg *config.Config) *autocert.Manager {
-	return &autocert.Manager{
-		Cache:      autocert.DirCache(cfg.CertDir),
-		Prompt:     autocert.AcceptTOS,
-		HostPolicy: autocert.HostWhitelist("syncapod.com", "www.syncapod.com"),
+	if cfg.Production {
+		return &autocert.Manager{
+			Cache:      autocert.DirCache(cfg.CertDir),
+			Prompt:     autocert.AcceptTOS,
+			HostPolicy: autocert.HostWhitelist("syncapod.com", "www.syncapod.com"),
+		}
 	}
+	return nil
 }
 
 func updatePodcasts(rssController *podcast.RSSController) {

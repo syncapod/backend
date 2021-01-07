@@ -19,7 +19,7 @@ services:
             target: prod
         restart: always
         volumes:
-            - syncapod-data:/syncapod
+            - cert-data:/cert
         networks:
             - backend
         ports:
@@ -30,7 +30,7 @@ services:
 
 volumes:
     pg-data:
-    syncapod-data:
+    cert-data:
 
 networks:
     backend:

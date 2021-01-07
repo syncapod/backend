@@ -22,6 +22,10 @@ func NewPodController(podStore *db.PodcastStore) (*PodController, error) {
 	return &PodController{podStore, catCache}, nil
 }
 
+func (p *PodController) ConvertCategories(ids []int) ([]Category, error) {
+	return p.catCache.LookupIDs(ids)
+}
+
 func (c *PodController) DoesPodcastExist(ctx context.Context, rssURL string) bool {
 	_, err := c.FindPodcastByRSS(ctx, rssURL)
 	return err == nil

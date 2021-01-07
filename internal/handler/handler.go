@@ -8,20 +8,23 @@ import (
 
 	"github.com/sschwartz96/syncapod-backend/internal/auth"
 	"github.com/sschwartz96/syncapod-backend/internal/config"
+	"github.com/sschwartz96/syncapod-backend/internal/podcast"
 )
 
 // Handler is the main handler for syncapod, all routes go through it
 type Handler struct {
 	oauthHandler *OauthHandler
+	alexaHandler *AlexaHandler
 }
 
 // CreateHandler sets up the main handler
-func CreateHandler(config *config.Config, authC auth.Auth) (*Handler, error) {
+func CreateHandler(config *config.Config, authC auth.Auth, podCon *podcast.PodController) (*Handler, error) {
 	oauthHandler, err := CreateOauthHandler(authC, config.AlexaClientID, config.AlexaSecret)
 	if err != nil {
 		return nil, fmt.Errorf("CreateHandler() error creating oauthHandler: %v", err)
 	}
-	return &Handler{oauthHandler: oauthHandler}, nil
+	alexaHandler := CreateAlexaHandler(authC, podCon)
+	return &Handler{oauthHandler: oauthHandler, alexaHandler: alexaHandler}, nil
 }
 
 // ServeHTTP handles all requests
@@ -32,6 +35,8 @@ func (h *Handler) ServeHTTP(res http.ResponseWriter, req *http.Request) {
 	switch head {
 	case "oauth":
 		h.oauthHandler.ServeHTTP(res, req)
+	case "api": //TODO: update this to better reflect
+		h.alexaHandler.Alexa(res, req)
 	}
 }
 

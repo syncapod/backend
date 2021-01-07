@@ -133,6 +133,7 @@ type Episode struct {
 	Duration    int64
 	LinkURL     string
 	ImageURL    string
+	ImageTitle  string
 	Explicit    string
 	// SITUATIONAL
 	Episode     int
@@ -140,6 +141,7 @@ type Episode struct {
 	EpisodeType string
 	//Block       bool
 	// OTHER
+	Subtitle  string
 	Summary   string
 	Encoded   string
 	PodcastID uuid.UUID

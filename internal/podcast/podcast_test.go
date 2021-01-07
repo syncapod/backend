@@ -1,37 +1,25 @@
 package podcast
 
 import (
-	"context"
-	"errors"
-	"fmt"
 	"log"
 	"os"
 	"testing"
-	"time"
 
 	"github.com/jackc/pgx/v4/pgxpool"
+	"github.com/sschwartz96/syncapod-backend/internal"
 )
 
 var (
-	testDB *pgxpool.Pool
+	dbpg *pgxpool.Pool
 )
 
 func TestMain(m *testing.M) {
-	// connect stop after 5 seconds
-	start := time.Now()
-	fiveSec := time.Second * 5
-	err := errors.New("start loop")
-	for err != nil {
-		if time.Since(start) > fiveSec {
-			log.Fatal(`Could not connect to postgres\n
-				Took longer than 5 seconds, maybe download postgres image`)
-		}
-		testDB, err = pgxpool.Connect(context.Background(),
-			fmt.Sprintf(
-				"postgres://postgres:secret@localhost:5432/postgres?sslmode=disable",
-			),
-		)
-		time.Sleep(time.Millisecond * 250)
+	// spin up docker container and return pgx pool
+	var dockerCleanFunc func() error
+	var err error
+	dbpg, dockerCleanFunc, err = internal.StartDockerDB("db_auth")
+	if err != nil {
+		log.Fatalf("auth.TestMain() error setting up docker db: %v", err)
 	}
 
 	// setup db
@@ -40,11 +28,17 @@ func TestMain(m *testing.M) {
 	// run tests
 	runCode := m.Run()
 
-	testDB.Close()
+	// close pgx pool
+	dbpg.Close()
+
+	// cleanup docker container
+	err = dockerCleanFunc()
+	if err != nil {
+		log.Fatalf("podcast.TestMain() error cleaning up docker container: %v", err)
+	}
 
 	os.Exit(runCode)
 }
 
 func setupPodcastDB() {
-
 }

@@ -15,6 +15,7 @@ const mockConfig = `{
 	"db_name": "syncapod",
 	"db_user": "syncapod",
 	"db_pass": "syncapod",
+	"db_host": "localhost",
 	"db_port": 5432,
 	"production": false
 }`
@@ -26,6 +27,7 @@ var mockConfigObj = &Config{
 	DbName:        "syncapod",
 	DbUser:        "syncapod",
 	DbPass:        "syncapod",
+	DbHost:        "localhost",
 	DbPort:        5432,
 	Production:    false,
 	MigrationsDir: "/syncapod/migrations",
