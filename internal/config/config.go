@@ -22,18 +22,20 @@ const (
 
 // Config holds variables for our server
 type Config struct {
-	DbUser        string `json:"db_user,omitempty"` // env:PG_USER
-	DbPass        string `json:"db_pass,omitempty"` // env:PG_PASS
-	DbHost        string `json:"db_host"`
-	DbPort        int    `json:"db_port"` // env:PG_PORT
-	DbName        string `json:"db_name"` // env:PG_DB_NAME
-	MigrationsDir string `json:"migrations_dir"`
-	Port          int    `json:"port"`
-	AlexaClientID string `json:"alexa_client_id"`
-	AlexaSecret   string `json:"alexa_secret"`
-	GRPCPort      int    `json:"grpc_port"`
-	Production    bool   `json:"production"`
-	CertDir       string `json:"cert_dir"` // only used if production=true
+	DbUser          string `json:"db_user,omitempty"` // env:PG_USER
+	DbPass          string `json:"db_pass,omitempty"` // env:PG_PASS
+	DbHost          string `json:"db_host"`
+	DbPort          int    `json:"db_port"` // env:PG_PORT
+	DbName          string `json:"db_name"` // env:PG_DB_NAME
+	MigrationsDir   string `json:"migrations_dir"`
+	Port            int    `json:"port"`
+	AlexaClientID   string `json:"alexa_client_id"`
+	AlexaSecret     string `json:"alexa_secret"`
+	ActionsClientID string `json:"actions_client_id"`
+	ActionsSecret   string `json:"actions_secret"`
+	GRPCPort        int    `json:"grpc_port"`
+	Production      bool   `json:"production"`
+	CertDir         string `json:"cert_dir"` // only used if production=true
 }
 
 // ReadConfig reads the config file encoded in JSON

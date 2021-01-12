@@ -2,6 +2,8 @@ package handler
 
 import (
 	"fmt"
+	"io/ioutil"
+	"log"
 	"net/http"
 	"path"
 	"strings"
@@ -18,8 +20,14 @@ type Handler struct {
 }
 
 // CreateHandler sets up the main handler
-func CreateHandler(config *config.Config, authC auth.Auth, podCon *podcast.PodController) (*Handler, error) {
-	oauthHandler, err := CreateOauthHandler(authC, config.AlexaClientID, config.AlexaSecret)
+func CreateHandler(cfg *config.Config, authC auth.Auth, podCon *podcast.PodController) (*Handler, error) {
+	oauthHandler, err := CreateOauthHandler(
+		authC,
+		map[string]string{
+			cfg.AlexaClientID:   cfg.AlexaSecret,
+			cfg.ActionsClientID: cfg.ActionsSecret,
+		},
+	)
 	if err != nil {
 		return nil, fmt.Errorf("CreateHandler() error creating oauthHandler: %v", err)
 	}
@@ -35,8 +43,21 @@ func (h *Handler) ServeHTTP(res http.ResponseWriter, req *http.Request) {
 	switch head {
 	case "oauth":
 		h.oauthHandler.ServeHTTP(res, req)
-	case "api": //TODO: update this to better reflect
+	case "api":
+		h.serveAPI(res, req)
+	}
+}
+
+func (h *Handler) serveAPI(res http.ResponseWriter, req *http.Request) {
+	var head string
+	head, req.URL.Path = ShiftPath(req.URL.Path)
+
+	switch head {
+	case "alexa":
 		h.alexaHandler.Alexa(res, req)
+	case "actions":
+		log.Println("actions req")
+		log.Println(ioutil.ReadAll(req.Body))
 	}
 }
 

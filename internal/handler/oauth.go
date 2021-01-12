@@ -2,7 +2,9 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
@@ -18,13 +20,11 @@ type OauthHandler struct {
 	authController auth.Auth
 	loginTemplate  *template.Template
 	authTemplate   *template.Template
-	// only used for alexa, need these in database if suppport more than one client
-	clientID     string
-	clientSecret string
+	clients        map[string]string
 }
 
 // CreateOauthHandler just intantiates an OauthHandler
-func CreateOauthHandler(authController auth.Auth, clientID, clientSecret string) (*OauthHandler, error) {
+func CreateOauthHandler(authController auth.Auth, clients map[string]string) (*OauthHandler, error) {
 	loginT, err := template.ParseFiles("./templates/oauth/login.gohtml")
 	if err != nil {
 		return nil, err
@@ -37,8 +37,7 @@ func CreateOauthHandler(authController auth.Auth, clientID, clientSecret string)
 		authController: authController,
 		loginTemplate:  loginT,
 		authTemplate:   authT,
-		clientID:       clientID,
-		clientSecret:   clientSecret,
+		clients:        clients,
 	}, nil
 }
 
@@ -148,12 +147,17 @@ func (h *OauthHandler) Token(res http.ResponseWriter, req *http.Request) {
 	// authenticate client as per RFC 6749 2.3.1.
 	id, secret, ok := req.BasicAuth()
 	if !ok {
-		fmt.Println("not using basic authentication?")
+		log.Println("Oauth.Token() error getting client credentials from basic auth")
+		body, err := ioutil.ReadAll(req.Body)
+		if err == nil {
+			log.Println("here is the body of req:", string(body))
+		}
 		sendTokenError(res, "unauthorized_client")
 		return
 	}
-	if id != h.clientID || secret != h.clientSecret {
-		fmt.Println("incorrect credentials")
+	err := h.authenticateClient(id, secret)
+	if err != nil {
+		log.Println("Oauth.Token() error authenticating client")
 		sendTokenError(res, "unauthorized_client")
 		return
 	}
@@ -223,6 +227,15 @@ func (h *OauthHandler) Token(res http.ResponseWriter, req *http.Request) {
 	if _, err = res.Write(json); err != nil {
 		log.Printf("OauthHandler.Token() error writing response: %v", err)
 	}
+}
+
+func (h *OauthHandler) authenticateClient(id, secret string) error {
+	for i, s := range h.clients {
+		if i == id && s == secret {
+			return nil
+		}
+	}
+	return errors.New("Oauth.authenticateClient() no matching credentials")
 }
 
 func sendTokenError(res http.ResponseWriter, err string) {
