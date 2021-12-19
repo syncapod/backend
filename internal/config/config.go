@@ -11,13 +11,14 @@ import (
 
 // Defaults
 const (
-	dbuserDefault        = "syncapod"
-	dbportDefault        = 5432
-	dbnameDefault        = "syncapod"
-	dbhostDefault        = "localhost"
-	migrationsDirDefault = "/syncapod/migrations"
-	portDefault          = 3030
-	grpcPortDefault      = 50051
+	dbuserDefault          = "syncapod"
+	dbportDefault          = 5432
+	dbnameDefault          = "syncapod"
+	dbhostDefault          = "localhost"
+	migrationsDirDefault   = "/syncapod/migrations"
+	portDefault            = 3030
+	grpcPortDefault        = 50051
+	grpcGatewayPortDefault = 50052
 )
 
 // Config holds variables for our server
@@ -34,20 +35,23 @@ type Config struct {
 	ActionsClientID string `json:"actions_client_id"`
 	ActionsSecret   string `json:"actions_secret"`
 	GRPCPort        int    `json:"grpc_port"`
+	GRPCGatewayPort int    `json:"grpc_gateway_port"`
 	Production      bool   `json:"production"`
 	CertDir         string `json:"cert_dir"` // only used if production=true
+	Debug           bool   `json:"debug"`
 }
 
 // ReadConfig reads the config file encoded in JSON
 func ReadConfig(r io.Reader) (*Config, error) {
 	config := &Config{
-		DbUser:        dbuserDefault,
-		DbPort:        dbportDefault,
-		DbName:        dbnameDefault,
-		DbHost:        dbhostDefault,
-		MigrationsDir: migrationsDirDefault,
-		Port:          portDefault,
-		GRPCPort:      grpcPortDefault,
+		DbUser:          dbuserDefault,
+		DbPort:          dbportDefault,
+		DbName:          dbnameDefault,
+		DbHost:          dbhostDefault,
+		MigrationsDir:   migrationsDirDefault,
+		Port:            portDefault,
+		GRPCPort:        grpcPortDefault,
+		GRPCGatewayPort: grpcGatewayPortDefault,
 	}
 	// Unmarshal into config var
 	err := json.NewDecoder(r).Decode(config)

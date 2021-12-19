@@ -39,7 +39,7 @@ func (a *AuthStorePG) GetUserByID(ctx context.Context, id uuid.UUID) (*UserRow, 
 
 func (a *AuthStorePG) GetUserByEmail(ctx context.Context, email string) (*UserRow, error) {
 	u := &UserRow{}
-	row := a.db.QueryRow(ctx, "SELECT * FROM Users WHERE email=$1", email)
+	row := a.db.QueryRow(ctx, "SELECT * FROM Users WHERE LOWER(email)=LOWER($1)", email)
 	err := row.Scan(&u.ID, &u.Email, &u.Username, &u.Birthdate, &u.PasswordHash, &u.Created, &u.LastSeen)
 	if err != nil {
 		return nil, fmt.Errorf("GetUserByEmail() error: %v", err)
@@ -49,7 +49,7 @@ func (a *AuthStorePG) GetUserByEmail(ctx context.Context, email string) (*UserRo
 
 func (a *AuthStorePG) GetUserByUsername(ctx context.Context, username string) (*UserRow, error) {
 	u := &UserRow{}
-	row := a.db.QueryRow(ctx, "SELECT * FROM Users WHERE username=$1", username)
+	row := a.db.QueryRow(ctx, "SELECT * FROM Users WHERE LOWER(username)=LOWER($1)", username)
 	err := row.Scan(&u.ID, &u.Email, &u.Username, &u.Birthdate, &u.PasswordHash, &u.Created, &u.LastSeen)
 	if err != nil {
 		return nil, fmt.Errorf("GetUserByUsername() error: %v", err)

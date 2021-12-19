@@ -93,7 +93,9 @@ func Test_PodcastGRPC(t *testing.T) {
 			End:   2,
 		},
 	)
-	require.Equal(t, nil, err)
+	if err != nil {
+		t.Fatalf("GetEpisodes() error: %v", err.Error())
+	}
 	require.Equal(t, 2, len(epis.Episodes))
 	require.Equal(t, convertEpiFromDB(testEpi2), epis.Episodes[0])
 	require.Equal(t, convertEpiFromDB(testEpi), epis.Episodes[1])

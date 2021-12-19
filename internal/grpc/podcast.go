@@ -36,11 +36,10 @@ func (p *PodcastService) GetPodcast(ctx context.Context, req *protos.GetPodReq) 
 	if err != nil {
 		return nil, status.Errorf(codes.NotFound, "Could not find podcast error: %v", err)
 	}
-	podCat, err := p.podCon.ConvertCategories(dbPod.Category)
+	pod, err := convertPodFromDB(dbPod, p.podCon)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "Could not convert category ids: %v", err)
+		return nil, status.Error(codes.Internal, err.Error())
 	}
-	pod := convertPodFromDB(dbPod, podCat)
 	return pod, nil
 }
 
@@ -52,7 +51,7 @@ func (p *PodcastService) GetEpisodes(ctx context.Context, req *protos.GetEpiReq)
 	}
 	dbEpis, err := p.podCon.FindEpisodesByRange(ctx, podID, req.Start, req.End)
 	if err != nil {
-		return nil, status.Error(codes.Internal, "Could not find episodes by range")
+		return nil, status.Errorf(codes.Internal, "Could not find episodes by range: %v", err)
 	}
 	epis := convertEpisFromDB(dbEpis)
 	return &protos.Episodes{Episodes: epis}, nil
@@ -128,12 +127,12 @@ func (p *PodcastService) GetUserLastPlayed(ctx context.Context, req *protos.GetU
 	if err != nil {
 		return nil, fmt.Errorf("GetUserLastPlayed() error: %v", err)
 	}
-	cats, err := p.podCon.ConvertCategories(pod.Category)
+	protoPod, err := convertPodFromDB(pod, p.podCon)
 	if err != nil {
-		return nil, fmt.Errorf("GetUserLastPlayed() error converting categories: %v", err)
+		return nil, status.Error(codes.Internal, err.Error())
 	}
 	return &protos.LastPlayedRes{
-		Podcast: convertPodFromDB(pod, cats),
+		Podcast: protoPod,
 		Episode: convertEpiFromDB(epi),
 		Millis:  userEpi.OffsetMillis,
 	}, nil

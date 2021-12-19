@@ -56,11 +56,16 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		log.Fatalf("grpc.TestMain() error setting up podcast database: %v", err)
 	}
+	err = setupAdmin()
+	if err != nil {
+		log.Fatalf("grpc.TestMain() error setting up db for admin: %v", err)
+	}
 
 	// setup grpc server
 	lis = bufconn.Listen(bufSize)
 	podCon, err := podcast.NewPodController(db.NewPodcastStore(dbpg))
 	authCon := auth.NewAuthController(db.NewAuthStorePG(dbpg), db.NewOAuthStorePG(dbpg))
+	rssCon := podcast.NewRSSController(podCon)
 	if err != nil {
 		log.Fatalf("grpc.TestMain() error setting up pod controller: %v", err)
 	}
@@ -68,6 +73,7 @@ func TestMain(m *testing.M) {
 		authCon,
 		NewAuthService(authCon),
 		NewPodcastService(podCon),
+		NewAdminService(podCon, rssCon),
 	)
 	//s := grpc.NewServer()
 	go func() {

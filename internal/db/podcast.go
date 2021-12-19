@@ -172,11 +172,23 @@ func (p *PodcastStore) FindEpisodeByURL(ctx context.Context, podID uuid.UUID, mp
 func (ps *PodcastStore) FindEpisodesByRange(ctx context.Context, podID uuid.UUID, start, end int64) ([]Episode, error) {
 	limit := end - start
 	offset := start
-	rows, err := ps.db.Query(ctx, "SELECT * FROM Episodes ORDER BY pub_date DESC LIMIT $1 OFFSET $2 ", limit, offset)
+	rows, err := ps.db.Query(ctx,
+		"SELECT * FROM Episodes WHERE podcast_id=$1 ORDER BY pub_date DESC LIMIT $2 OFFSET $3 ",
+		podID, limit, offset,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("FindPodcastsByRange() error: %v", err)
 	}
 	return scanEpisodeRows(rows, []Episode{})
+}
+
+func (p *PodcastStore) InsertCategory(ctx context.Context, cat *Category) error {
+	_, err := p.db.Exec(ctx, "INSERT INTO Categories(id,name,parent_id) VALUES($1,$2,$3)",
+		cat.ID, cat.Name, cat.ParentID)
+	if err != nil {
+		return fmt.Errorf("InsertCategory() error inserting cateogry: %v", err)
+	}
+	return nil
 }
 
 func (p *PodcastStore) FindAllCategories(ctx context.Context) ([]Category, error) {

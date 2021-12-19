@@ -120,7 +120,7 @@ INSERT INTO Categories (id,name,parent_id) VALUES (0, 'nil', 0),
 	(28,'Government',0),
 	(29,'History',0),
 	(30,'Health & Fitness',0),(31,'Alternative Health',30),(32,'Fitness',30),(33,'Medicine',30),(34,'Mental Health',30),(35,'Nutrition',30),(36,'Sexuality',30),
-	(37,'Kids & Family',0),(38,'Education for Kids',37),(39,'Parenting',37),(40,'Pets & Animals',37),(110,'Stories for Kids',37),
+	(37,'Kids & Family',0),(38,'Education for Kids',37),(39,'Parenting',37),(40,'Pets & Animals',37),
 	(41,'Leisure',0),(42,'Animation & Manga',41),(43,'Automotive',41),(44,'Aviation',41),(45,'Crafts',41),(46,'Games',41),(47,'Hobbies',41),(48,'Home & Garden',41),(49,'Video Games',41),
 	(50,'Music',0),(51,'Music Commentary',50),(52,'Music History',50),(53,'Music Interviews',50),
 	(54,'News',0),(55,'Business News',54),(56,'Daily News',54),(57,'Entertainment News',54),(58,'News Commentary',54),(59,'Politics',54),(60,'Sports News',54),(61,'Tech News',54),
@@ -131,7 +131,9 @@ INSERT INTO Categories (id,name,parent_id) VALUES (0, 'nil', 0),
 		(94,'Rugby',86),(95,'Running',86),(96,'Soccer',86),(97,'Swimming',86),(98,'Tennis',86),(99,'Volleyball',86),(100,'Wilderness',86),(101,'Wrestling',86),
 	(102,'Technology',0),
 	(103,'True Crime',0),
-	(104,'TV & Film',0),(105,'After Shows',104),(106,'Film History',104),(107,'Film Interviews',104),(108,'Film Reviews',104),(109,'TV Reviews',104)
+	(104,'TV & Film',0),(105,'After Shows',104),(106,'Film History',104),(107,'Film Interviews',104),(108,'Film Reviews',104),(109,'TV Reviews',104),
+	-- added later
+	(110,'Stories for Kids',37)
 ;
 
 -- SEARCH

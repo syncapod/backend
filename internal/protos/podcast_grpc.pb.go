@@ -11,6 +11,7 @@ import (
 
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the grpc package it is being compiled against.
+// Requires gRPC-Go v1.32.0 or later.
 const _ = grpc.SupportPackageIsVersion7
 
 // PodClient is the client API for Pod service.
@@ -153,8 +154,8 @@ type UnsafePodServer interface {
 	mustEmbedUnimplementedPodServer()
 }
 
-func RegisterPodServer(s *grpc.Server, srv PodServer) {
-	s.RegisterService(&_Pod_serviceDesc, srv)
+func RegisterPodServer(s grpc.ServiceRegistrar, srv PodServer) {
+	s.RegisterService(&Pod_ServiceDesc, srv)
 }
 
 func _Pod_GetPodcast_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -283,7 +284,10 @@ func _Pod_GetUserLastPlayed_Handler(srv interface{}, ctx context.Context, dec fu
 	return interceptor(ctx, in, info, handler)
 }
 
-var _Pod_serviceDesc = grpc.ServiceDesc{
+// Pod_ServiceDesc is the grpc.ServiceDesc for Pod service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var Pod_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "protos.Pod",
 	HandlerType: (*PodServer)(nil),
 	Methods: []grpc.MethodDesc{

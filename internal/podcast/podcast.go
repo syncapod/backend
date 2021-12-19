@@ -18,7 +18,7 @@ func NewPodController(podStore *db.PodcastStore) (*PodController, error) {
 	if err != nil {
 		return nil, fmt.Errorf("NewPodController() error creating CategoryCache: %v", err)
 	}
-	catCache := newCategoryCache(cats)
+	catCache := newCategoryCache(cats, podStore)
 	return &PodController{podStore, catCache}, nil
 }
 

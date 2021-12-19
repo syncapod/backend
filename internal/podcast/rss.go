@@ -101,7 +101,7 @@ func (c *RSSController) updatePodcast(pod *db.Podcast) error {
 // AddNewPodcast takes RSS url and a reader to the RSS feed and
 // inserts the podcast and its episodes into the db
 // returns error if podcast already exists
-func (c *RSSController) AddNewPodcast(url string, r io.Reader) (*uuid.UUID, error) {
+func (c *RSSController) AddNewPodcast(url string, r io.Reader) (*db.Podcast, error) {
 	// check if podcast already contains that rss url
 	exists := c.podController.DoesPodcastExist(context.Background(), url)
 	if exists {
@@ -113,7 +113,10 @@ func (c *RSSController) AddNewPodcast(url string, r io.Reader) (*uuid.UUID, erro
 	if err != nil {
 		return nil, err
 	}
-	pod := c.rssChannelToPodcast(&rssPod.Channel, uuid.New(), url)
+	pod, err := c.rssChannelToPodcast(&rssPod.Channel, uuid.New(), url)
+	if err != nil {
+		return nil, fmt.Errorf("AddNewPodcast() error converting rss: %v", err)
+	}
 
 	// insert podcast
 	err = c.podController.InsertPodcast(context.Background(), pod)
@@ -129,7 +132,7 @@ func (c *RSSController) AddNewPodcast(url string, r io.Reader) (*uuid.UUID, erro
 			log.Println("AddNewPodcast() couldn't insert episode: ", err)
 		}
 	}
-	return &pod.ID, nil
+	return pod, nil
 }
 
 func DownloadRSS(url string) (io.ReadCloser, error) {
@@ -285,10 +288,14 @@ type Category struct {
 	Subcategories []Category `xml:"category"`
 }
 
-func (c *RSSController) rssChannelToPodcast(r *rssChannel, id uuid.UUID, rssURL string) *db.Podcast {
+func (c *RSSController) rssChannelToPodcast(r *rssChannel, id uuid.UUID, rssURL string) (*db.Podcast, error) {
 	pubDate, err := parseRFC2822ToUTC(r.PubDate)
 	if err != nil {
 		log.Println("rssChannelToPodcast() error converting pubdate:", err)
+	}
+	cats, err := c.podController.catCache.TranslateCategories(r.Categories)
+	if err != nil {
+		return nil, fmt.Errorf("rssChannelToPodcast() error translating categories: %v", err)
 	}
 	return &db.Podcast{
 		ID:          id,
@@ -296,7 +303,7 @@ func (c *RSSController) rssChannelToPodcast(r *rssChannel, id uuid.UUID, rssURL 
 		Description: r.Description,
 		ImageURL:    r.Image.Href,
 		Language:    r.Language,
-		Category:    c.podController.catCache.TranslateCategories(r.Categories, []int{}),
+		Category:    cats,
 		Explicit:    r.Explicit,
 		Author:      r.Author,
 		LinkURL:     r.Link,
@@ -310,7 +317,7 @@ func (c *RSSController) rssChannelToPodcast(r *rssChannel, id uuid.UUID, rssURL 
 		Keywords:    r.Keywords,
 		Summary:     r.Summary,
 		RSSURL:      rssURL,
-	}
+	}, nil
 }
 
 func rssItemToDBEpisode(r *rssItem, podID uuid.UUID) *db.Episode {

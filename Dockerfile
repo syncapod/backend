@@ -1,3 +1,4 @@
+# Compile app
 FROM golang:alpine AS build
 RUN mkdir /app
 WORKDIR /app
@@ -7,6 +8,7 @@ RUN go mod download
 COPY . /app
 RUN go build -o /app/main cmd/main.go
 
+# Final docker container
 FROM alpine:latest AS prod
 WORKDIR /syncapod
 COPY --from=0 /app/main /syncapod

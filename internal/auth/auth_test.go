@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/sschwartz96/syncapod-backend/internal"
 	"github.com/sschwartz96/syncapod-backend/internal/db"
+	"github.com/stretchr/testify/require"
 )
 
 var (
@@ -181,6 +182,17 @@ func TestAuthController_Logout(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestAuthController_CreateUser(t *testing.T) {
+	a := &AuthController{
+		authStore:  authStore,
+		oauthStore: oauthStore,
+	}
+	email, username, pwd := "testCreateUser@syncapod.com", "testCreateUser", "secret"
+	u, err := a.CreateUser(context.Background(), email, username, pwd, time.Now())
+	require.Nil(t, err)
+	require.NotNil(t, u)
 }
 
 func TestAuthController_findUserByEmailOrUsername(t *testing.T) {

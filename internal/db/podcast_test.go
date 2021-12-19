@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/stretchr/testify/require"
 )
 
@@ -238,4 +239,37 @@ func Test_FindSubscriptions(t *testing.T) {
 		t.Fatalf("Test_FindSubscriptions() error finding subscriptions: %v", err)
 	}
 	require.Equal(t, []Subscription{*testSub, *testSub2}, subs)
+}
+
+func TestPodcastStore_InsertCategory(t *testing.T) {
+	type fields struct {
+		db *pgxpool.Pool
+	}
+	type args struct {
+		ctx context.Context
+		cat *Category
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		wantErr bool
+	}{
+		{
+			name:    "insert_category",
+			fields:  fields{dbpg},
+			args:    args{ctx: context.Background(), cat: &Category{ID: 200, Name: "test cat", ParentID: 0}},
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := &PodcastStore{
+				db: tt.fields.db,
+			}
+			if err := p.InsertCategory(tt.args.ctx, tt.args.cat); (err != nil) != tt.wantErr {
+				t.Errorf("PodcastStore.InsertCategory() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
 }

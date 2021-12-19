@@ -28,10 +28,11 @@ func Test_RSS(t *testing.T) {
 	defer r.Close()
 
 	// test add the podcast
-	podID, err := rssController.AddNewPodcast(rssURL, r)
+	pod, err := rssController.AddNewPodcast(rssURL, r)
 	if err != nil {
 		t.Fatalf("Test_RSS() error adding new podcast: %v", err)
 	}
+	podID := &pod.ID
 
 	// get the latest episode
 	epi, err := rssController.podController.FindLatestEpisode(context.Background(), *podID)

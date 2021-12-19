@@ -81,7 +81,7 @@ func Test_Oauth(t *testing.T) {
 	}
 	bodyString := string(body)
 	require.Contains(t, string(body), "<a href=\"/oauth/authorize?")
-	uri := "https://syncapod.com/" + bodyString[10:115]
+	uri := "https://syncapod.com/" + strings.ReplaceAll(bodyString[10:115], "&amp;", "&")
 
 	// oauth/authorize GET
 	rec = httptest.NewRecorder()
@@ -102,7 +102,7 @@ func Test_Oauth(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Test_Oauth() POST authorize error: %v", err)
 	}
-	require.Equal(t, res.StatusCode, 303)
+	require.Equal(t, 303, res.StatusCode)
 	loc, err := res.Location()
 	if err != nil {
 		t.Fatal("Test_Oauth() POST authorize location error")
@@ -169,7 +169,7 @@ func createTestOAuthHandler(authC auth.Auth) (*OauthHandler, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &OauthHandler{authC, loginT, authT, "testClientID", "testClientSecret"}, nil
+	return &OauthHandler{authC, loginT, authT, map[string]string{"testClientID": "testClientSecret"}}, nil
 }
 
 func setup(pg *pgxpool.Pool) {

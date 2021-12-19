@@ -17,6 +17,7 @@ type Auth interface {
 	Login(ctx context.Context, username, password, agent string) (*db.UserRow, *db.SessionRow, error)
 	Authorize(ctx context.Context, sessionID uuid.UUID) (*db.UserRow, error)
 	Logout(ctx context.Context, sessionID uuid.UUID) error
+	CreateUser(ctx context.Context, email, username, pwd string, dob time.Time) (*db.UserRow, error)
 	// OAuth
 	CreateAuthCode(ctx context.Context, userID uuid.UUID, clientID string) (*db.AuthCodeRow, error)
 	CreateAccessToken(ctx context.Context, authCode *db.AuthCodeRow) (*db.AccessTokenRow, error)
@@ -89,6 +90,19 @@ func (a *AuthController) Logout(ctx context.Context, sessionID uuid.UUID) error 
 		return fmt.Errorf("AuthController.Logout() error deleting session: %v", err)
 	}
 	return nil
+}
+func (a *AuthController) CreateUser(ctx context.Context, email, username, pwd string, dob time.Time) (*db.UserRow, error) {
+	pwdHash, err := hash(pwd)
+	if err != nil {
+		return nil, fmt.Errorf("AuthController.CreateUser() error hashing password: %v", err)
+	}
+
+	newUser := &db.UserRow{ID: uuid.New(), Email: email, Username: username, Birthdate: dob, PasswordHash: pwdHash, Created: time.Now(), LastSeen: time.Now()}
+	err = a.authStore.InsertUser(ctx, newUser)
+	if err != nil {
+		return nil, fmt.Errorf("AuthController.CreateUser() error inserting user into db: %v", err)
+	}
+	return newUser, nil
 }
 
 // findUserByEmailOrUsername is a helper method for login

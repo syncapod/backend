@@ -1,3 +1,4 @@
+// TestMain() located in podcast_test.go
 package podcast
 
 import (
@@ -5,9 +6,10 @@ import (
 	"testing"
 
 	"github.com/sschwartz96/syncapod-backend/internal/db"
+	"github.com/stretchr/testify/require"
 )
 
-var catCon = newCategoryCache(
+var catCache = newCategoryCache(
 	[]db.Category{
 		{ID: 0, ParentID: 0, Name: "nil"},
 		{ID: 1, ParentID: 0, Name: "News"},
@@ -16,7 +18,8 @@ var catCon = newCategoryCache(
 		{ID: 4, ParentID: 0, Name: "True Crime"},
 		{ID: 5, ParentID: 0, Name: "Sports"},
 		{ID: 6, ParentID: 5, Name: "Baseball"},
-	},
+		{ID: 7, ParentID: 6, Name: "3rd Level"},
+	}, db.NewPodcastStore(dbpg),
 )
 
 func TestCategoryController_LookupIDs(t *testing.T) {
@@ -71,7 +74,7 @@ func TestCategoryController_LookupIDs(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := catCon.LookupIDs(tt.ids)
+			got, err := catCache.LookupIDs(tt.ids)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("CategoryController.LookupIDs() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -136,9 +139,32 @@ func TestCategoryController_TranslateCategories(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := catCon.TranslateCategories(tt.cats, tt.ids)
+			got, err := catCache.TranslateCategories(tt.cats)
+			require.Nil(t, err)
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("CategoryController.TranslateCategories() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCategoryCache_buildAncesterTree(t *testing.T) {
+	type args struct {
+		i int
+		s string
+	}
+	tests := []struct {
+		name string
+		args args
+		want string
+	}{
+		{"Sports News", args{3, ""}, "NewsSports News"},
+		{"3rd Level", args{7, ""}, "SportsBaseball3rd Level"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := catCache.buildAncesterTree(tt.args.i, tt.args.s); got != tt.want {
+				t.Errorf("CategoryCache.buildAncesterTree() = %v, want %v", got, tt.want)
 			}
 		})
 	}

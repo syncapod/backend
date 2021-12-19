@@ -3,7 +3,6 @@
 package grpc
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/google/uuid"
@@ -32,7 +31,15 @@ func convertUserFromDB(ur *db.UserRow) *protos.User {
 	}
 }
 
-func convertPodFromDB(pr *db.Podcast, cats []podcast.Category) *protos.Podcast {
+func convertPodFromDB(pr *db.Podcast, podCon *podcast.PodController) (*protos.Podcast, error) {
+	cats, err := podCon.ConvertCategories(pr.Category)
+	if err != nil {
+		return nil, err
+	}
+	return dbPodToProto(pr, cats), nil
+}
+
+func dbPodToProto(pr *db.Podcast, cats []podcast.Category) *protos.Podcast {
 	return &protos.Podcast{
 		Id:            pr.ID.String(),
 		Title:         pr.Title,
@@ -72,13 +79,13 @@ func convertEpiFromDB(er *db.Episode) *protos.Episode {
 }
 
 func convertPodsFromDB(podCon *podcast.PodController, p []db.Podcast) ([]*protos.Podcast, error) {
+	var err error
 	protoPods := make([]*protos.Podcast, len(p))
 	for i := range p {
-		cats, err := podCon.ConvertCategories(p[i].Category)
+		protoPods[i], err = convertPodFromDB(&p[i], podCon)
 		if err != nil {
-			return nil, fmt.Errorf("Could not convert podcast categories: %v", err)
+			return nil, err
 		}
-		protoPods[i] = convertPodFromDB(&p[i], cats)
 	}
 	return protoPods, nil
 }
