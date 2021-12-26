@@ -3,11 +3,12 @@ version: "3.8"
 services:
     db:
         image: postgres:latest
+        container_name: db
         restart: always
         environment:
             - POSTGRES_DB=syncapod
             - POSTGRES_USER=syncapod
-            - POSTGRES_PASSWORD=${db_pass}
+            - POSTGRES_PASSWORD=${DB_PASS}
         volumes:
             - pg-data:/var/lib/postgresql/data
         networks:
@@ -16,10 +17,10 @@ services:
     syncapod:
         build:
             context: .
-            target: prod
+        container_name: syncapod
         restart: always
         volumes:
-            - cert-data:/cert
+            - /certs:/certs
         networks:
             - backend
         ports:
@@ -30,7 +31,6 @@ services:
 
 volumes:
     pg-data:
-    cert-data:
 
 networks:
     backend:

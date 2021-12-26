@@ -17,3 +17,6 @@ syncapod
 
 *.env
 config.json
+
+# tags for vim
+tags

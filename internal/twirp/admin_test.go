@@ -1,18 +1,18 @@
 // Package TestMain() located in auth_test.go
-package grpc
+package twirp
 
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/sschwartz96/syncapod-backend/internal/db"
-	"github.com/sschwartz96/syncapod-backend/internal/protos"
+	protos "github.com/sschwartz96/syncapod-backend/internal/gen"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/metadata"
+	"github.com/twitchtv/twirp"
 )
 
 var (
@@ -30,24 +30,19 @@ func setupAdmin() error {
 		return fmt.Errorf("failed to insert user session: %v", err)
 	}
 	return nil
-
 }
 
 func Test_AdminGRPC(t *testing.T) {
 	// add metadata for authorization
-	ctx := metadata.AppendToOutgoingContext(context.Background(), "token", testSesh.ID.String())
+	header := make(http.Header)
+	header.Set(authTokenKey, testSesh.ID.String())
 
-	// setup pod client
-	conn, err := grpc.DialContext(
-		ctx, "bufnet",
-		grpc.WithContextDialer(bufDialer),
-		grpc.WithInsecure(),
-	)
+	ctx, err := twirp.WithHTTPRequestHeaders(context.Background(), header)
 	if err != nil {
-		t.Fatalf("failed to dial grpc bufnet: %v", err)
+		t.Fatalf("Twirp could not add add headers: %v", err)
 	}
-	defer conn.Close()
-	client := protos.NewAdminClient(conn)
+
+	client := protos.NewAdminJSONClient("http://localhost:8081", http.DefaultClient, twirp.WithClientPathPrefix("/rpc/admin"))
 
 	// AddPodcast
 	addPodRes, err := client.AddPodcast(ctx, &protos.AddPodReq{Url: goTimeRSSURL})

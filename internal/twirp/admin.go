@@ -1,18 +1,17 @@
-package grpc
+package twirp
 
 import (
 	"context"
 	"log"
 	"net/http"
 
+	protos "github.com/sschwartz96/syncapod-backend/internal/gen"
 	"github.com/sschwartz96/syncapod-backend/internal/podcast"
-	"github.com/sschwartz96/syncapod-backend/internal/protos"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
 type AdminService struct {
-	*protos.UnimplementedAdminServer
 	podCon *podcast.PodController
 	rssCon *podcast.RSSController
 }

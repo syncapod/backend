@@ -1,14 +1,14 @@
 // util.go contains conversion functions for the various db models to protobufs
 
-package grpc
+package twirp
 
 import (
 	"strings"
 
 	"github.com/google/uuid"
 	"github.com/sschwartz96/syncapod-backend/internal/db"
+	protos "github.com/sschwartz96/syncapod-backend/internal/gen"
 	"github.com/sschwartz96/syncapod-backend/internal/podcast"
-	"github.com/sschwartz96/syncapod-backend/internal/protos"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 

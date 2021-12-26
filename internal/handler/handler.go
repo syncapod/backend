@@ -37,6 +37,22 @@ func CreateHandler(cfg *config.Config, authC auth.Auth, podCon *podcast.PodContr
 
 // ServeHTTP handles all requests
 func (h *Handler) ServeHTTP(res http.ResponseWriter, req *http.Request) {
+	// first check for mta-sts subdomain
+	// MTA-STS doc: https://maddy.email/tutorials/setting-up/
+	host := strings.TrimSpace(strings.ToLower(req.Host))
+	if strings.HasPrefix(host, "mta-sts") {
+		if strings.HasSuffix(req.URL.Path, "/.well-known/mta-sts.txt") {
+			res.Write([]byte(`version: STSv1
+mode: enforce
+max_age: 604800
+mx: mail.syncapod.com`))
+			return
+		}
+		res.Write([]byte("404 Page not Found"))
+		return
+	}
+
+	// normal routing
 	var head string
 	head, req.URL.Path = ShiftPath(req.URL.Path)
 
