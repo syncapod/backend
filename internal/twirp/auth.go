@@ -2,6 +2,7 @@ package twirp
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/sschwartz96/syncapod-backend/internal/auth"
@@ -17,6 +18,26 @@ type AuthService struct {
 // NewAuthService creates a new *AuthService
 func NewAuthService(a *auth.AuthController) *AuthService {
 	return &AuthService{ac: a}
+}
+
+// CreateAccount verifies proper username, email, password, and acceptTerms fields
+func (a *AuthService) CreateAccount(ctx context.Context, req *protos.CreateAccountReq) (*protos.CreateAccountRes, error) {
+	// accept terms
+	if !req.AcceptTerms {
+		return &protos.CreateAccountRes{Error: "accept terms cannot be false"}, nil
+	}
+
+	// password > 15 characters
+	if len(req.Password) < 15 {
+		return &protos.CreateAccountRes{Error: "password has to be at least than 15 characters"}, nil
+	}
+
+	// create account
+	dob := time.Unix(req.DateOfBirth, 0)
+	a.ac.CreateUser(ctx, req.Email, req.Username, req.Password, dob)
+	// TODO: handle errors
+
+	return &protos.CreateAccountRes{Error: ""}, nil
 }
 
 // Authenticate handles the authentication to syncapod and returns response
