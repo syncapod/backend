@@ -112,8 +112,8 @@ func (s *Server) authorizeHook() *twirp.ServerHooks {
 		if !ok {
 			return ctx, twirp.NotFound.Error("Auth Hook, Method Not Found")
 		}
-		// if Authenticate method then allow the method to proceed
-		if methodName == "Authenticate" {
+		// allow certain RPC methods to go through
+		if methodName == "Authenticate" || methodName == "CreateAccount" || methodName == "ResetPassword" {
 			return ctx, nil
 		}
 

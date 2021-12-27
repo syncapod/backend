@@ -18,6 +18,8 @@ type Auth interface {
 	Authorize(ctx context.Context, sessionID uuid.UUID) (*db.UserRow, error)
 	Logout(ctx context.Context, sessionID uuid.UUID) error
 	CreateUser(ctx context.Context, email, username, pwd string, dob time.Time) (*db.UserRow, error)
+	ResetPassword(ctx context.Context, emailOrUsername string) error
+
 	// OAuth
 	CreateAuthCode(ctx context.Context, userID uuid.UUID, clientID string) (*db.AuthCodeRow, error)
 	CreateAccessToken(ctx context.Context, authCode *db.AuthCodeRow) (*db.AccessTokenRow, error)
@@ -102,7 +104,21 @@ func (a *AuthController) CreateUser(ctx context.Context, email, username, pwd st
 	if err != nil {
 		return nil, fmt.Errorf("AuthController.CreateUser() error inserting user into db: %v", err)
 	}
+
+	// TODO: add activated bool on db.UserRow
+	// TODO: generate activation token and send to the queue for email
 	return newUser, nil
+}
+
+func (a *AuthController) ResetPassword(ctx context.Context, email string) error {
+	user, err := a.authStore.GetUserByEmail(ctx, email)
+	if err != nil {
+		return err
+	}
+	// TODO: generate reset token
+	//		 then send to the queue to send email with link
+	log.Println(user)
+	return nil
 }
 
 // findUserByEmailOrUsername is a helper method for login

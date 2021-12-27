@@ -2,6 +2,8 @@ package twirp
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -24,7 +26,14 @@ func NewAuthService(a *auth.AuthController) *AuthService {
 func (a *AuthService) CreateAccount(ctx context.Context, req *protos.CreateAccountReq) (*protos.CreateAccountRes, error) {
 	// accept terms
 	if !req.AcceptTerms {
-		return &protos.CreateAccountRes{Error: "accept terms cannot be false"}, nil
+		return &protos.CreateAccountRes{
+			Error: "terms of use must be accepted",
+		}, nil
+	}
+
+	// ensure user is older than 18
+	if (time.Now().Unix() - req.DateOfBirth) < 567648000 {
+		return &protos.CreateAccountRes{Error: "user must be at least 18 years old"}, nil
 	}
 
 	// password > 15 characters
@@ -34,10 +43,28 @@ func (a *AuthService) CreateAccount(ctx context.Context, req *protos.CreateAccou
 
 	// create account
 	dob := time.Unix(req.DateOfBirth, 0)
-	a.ac.CreateUser(ctx, req.Email, req.Username, req.Password, dob)
-	// TODO: handle errors
+	_, err := a.ac.CreateUser(ctx, req.Email, req.Username, req.Password, dob)
+	if err != nil {
+		if strings.Contains(err.Error(), "email") {
+			return &protos.CreateAccountRes{Error: "email in use"}, nil
+		}
+		if strings.Contains(err.Error(), "username") {
+			return &protos.CreateAccountRes{Error: "username in use"}, nil
+		}
+		return &protos.CreateAccountRes{
+			Error: fmt.Sprintf("unknown error: %v", err.Error()),
+		}, nil
+	}
+
+	// TODO: send activation email
 
 	return &protos.CreateAccountRes{Error: ""}, nil
+}
+
+// ResetPassword method is called when user forgets password
+func (a *AuthService) ResetPassword(ctx context.Context, req *protos.ResetPasswordReq) (*protos.ResetPasswordRes, error) {
+	err := a.ac.ResetPassword(ctx, req.Email)
+	return &protos.ResetPasswordRes{}, nil
 }
 
 // Authenticate handles the authentication to syncapod and returns response

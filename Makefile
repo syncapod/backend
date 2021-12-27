@@ -40,7 +40,7 @@ protos:
 		-I ${GOOGLE_API_PROTO_DIR} \
 		--go_out=internal/gen/ \
 		--twirp_out=internal/gen/ \
-		$(PROTO_DIR)*
+		$(PROTO_DIR)/*
 
 grpc-gateway:
 	protoc -I $(PROTO_DIR) \
