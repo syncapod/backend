@@ -5,7 +5,8 @@ CREATE TABLE Users (
 	birthdate DATE NOT NULL,
 	password_hash BYTEA NOT NULL,
 	created TIMESTAMPTZ NOT NULL,
-	last_seen TIMESTAMPTZ NOT NULL
+	last_seen TIMESTAMPTZ NOT NULL,
+	actived BOOLEAN DEFAULT TRUE
 );
 
 CREATE TABLE Sessions (

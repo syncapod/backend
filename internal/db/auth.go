@@ -16,10 +16,14 @@ func NewAuthStorePG(db *pgxpool.Pool) *AuthStorePG {
 	return &AuthStorePG{db: db}
 }
 
+func scanUserRow(row scanner, u *UserRow) error {
+	return row.Scan(&u.ID, &u.Email, &u.Username, &u.Birthdate, &u.PasswordHash, &u.Created, &u.LastSeen, &u.Activated)
+}
+
 // User
 func (a *AuthStorePG) InsertUser(ctx context.Context, u *UserRow) error {
 	_, err := a.db.Exec(ctx,
-		"INSERT INTO Users (id,email,username,birthdate,password_hash, created, last_seen) VALUES($1,$2,$3,$4,$5,$6,$7)",
+		"INSERT INTO Users (id,email,username,birthdate,password_hash, created, last_seen, activated) VALUES($1,$2,$3,$4,$5,$6,$7,$8)",
 		&u.ID, &u.Email, &u.Username, &u.Birthdate, &u.PasswordHash, &u.Created, &u.LastSeen)
 	if err != nil {
 		return fmt.Errorf("InsertUser() error: %v", err)
@@ -27,45 +31,46 @@ func (a *AuthStorePG) InsertUser(ctx context.Context, u *UserRow) error {
 	return nil
 }
 
-func (a *AuthStorePG) GetUserByID(ctx context.Context, id uuid.UUID) (*UserRow, error) {
+func (a *AuthStorePG) FindUserByID(ctx context.Context, id uuid.UUID) (*UserRow, error) {
 	u := &UserRow{}
 	row := a.db.QueryRow(ctx, "SELECT * FROM Users WHERE id=$1", id)
-	err := row.Scan(&u.ID, &u.Email, &u.Username, &u.Birthdate, &u.PasswordHash, &u.Created, &u.LastSeen)
+	err := scanUserRow(row, u)
 	if err != nil {
 		return nil, fmt.Errorf("GetUserByID() error: %v", err)
 	}
 	return u, nil
 }
 
-func (a *AuthStorePG) GetUserByEmail(ctx context.Context, email string) (*UserRow, error) {
+func (a *AuthStorePG) FindUserByEmail(ctx context.Context, email string) (*UserRow, error) {
 	u := &UserRow{}
 	row := a.db.QueryRow(ctx, "SELECT * FROM Users WHERE LOWER(email)=LOWER($1)", email)
-	err := row.Scan(&u.ID, &u.Email, &u.Username, &u.Birthdate, &u.PasswordHash, &u.Created, &u.LastSeen)
+	err := scanUserRow(row, u)
 	if err != nil {
 		return nil, fmt.Errorf("GetUserByEmail() error: %v", err)
 	}
 	return u, nil
 }
 
-func (a *AuthStorePG) GetUserByUsername(ctx context.Context, username string) (*UserRow, error) {
+func (a *AuthStorePG) FindUserByUsername(ctx context.Context, username string) (*UserRow, error) {
 	u := &UserRow{}
 	row := a.db.QueryRow(ctx, "SELECT * FROM Users WHERE LOWER(username)=LOWER($1)", username)
-	err := row.Scan(&u.ID, &u.Email, &u.Username, &u.Birthdate, &u.PasswordHash, &u.Created, &u.LastSeen)
+	err := scanUserRow(row, u)
 	if err != nil {
 		return nil, fmt.Errorf("GetUserByUsername() error: %v", err)
 	}
 	return u, nil
 }
 
-func (a *AuthStorePG) UpdateUser(ctx context.Context, u *UserRow) error {
-	_, err := a.db.Exec(ctx,
-		"UPDATE Users SET email=$2,username=$3,birthdate=$4,last_seen=$5 WHERE id=$1",
-		&u.ID, &u.Email, &u.Username, &u.Birthdate, &u.LastSeen)
-	if err != nil {
-		return fmt.Errorf("UpdateUser() error: %v", err)
-	}
-	return nil
-}
+// TODO: probably need specific update functions
+// func (a *AuthStorePG) UpdateUser(ctx context.Context, u *UserRow) error {
+// 	_, err := a.db.Exec(ctx,
+// 		"UPDATE Users SET email=$2,username=$3,birthdate=$4,last_seen=$5 WHERE id=$1",
+// 		&u.ID, &u.Email, &u.Username, &u.Birthdate, &u.LastSeen)
+// 	if err != nil {
+// 		return fmt.Errorf("UpdateUser() error: %v", err)
+// 	}
+// 	return nil
+// }
 
 func (a AuthStorePG) UpdateUserPassword(ctx context.Context, id uuid.UUID, password_hash []byte) error {
 	_, err := a.db.Exec(ctx,

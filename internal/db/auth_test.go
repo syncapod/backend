@@ -108,7 +108,7 @@ func TestAuthStorePG_GetUserByID(t *testing.T) {
 			a := &AuthStorePG{
 				db: tt.fields.db,
 			}
-			got, err := a.GetUserByID(tt.args.ctx, tt.args.id)
+			got, err := a.FindUserByID(tt.args.ctx, tt.args.id)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("AuthStorePG.GetUserByID() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -151,7 +151,7 @@ func TestAuthStorePG_GetUserByEmail(t *testing.T) {
 			a := &AuthStorePG{
 				db: tt.fields.db,
 			}
-			got, err := a.GetUserByEmail(tt.args.ctx, tt.args.email)
+			got, err := a.FindUserByEmail(tt.args.ctx, tt.args.email)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("AuthStorePG.GetUserByEmail() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -194,7 +194,7 @@ func TestAuthStorePG_GetUserByUsername(t *testing.T) {
 			a := &AuthStorePG{
 				db: tt.fields.db,
 			}
-			got, err := a.GetUserByUsername(tt.args.ctx, tt.args.username)
+			got, err := a.FindUserByUsername(tt.args.ctx, tt.args.username)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("AuthStorePG.GetUserByUsername() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -206,48 +206,48 @@ func TestAuthStorePG_GetUserByUsername(t *testing.T) {
 	}
 }
 
-func TestAuthStorePG_UpdateUser(t *testing.T) {
-	type fields struct {
-		db *pgxpool.Pool
-	}
-	type args struct {
-		ctx context.Context
-		u   *UserRow
-	}
-	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		wantErr bool
-	}{
-		{
-			name: "valid",
-			args: args{
-				ctx: context.Background(),
-				u:   &UserRow{ID: uuid.MustParse("b813c6e3-9cd0-4aed-9c4e-1d88ae20c777"), Email: "update@updated.test", Username: "updated", Birthdate: time.Unix(0, 0).UTC(), PasswordHash: []byte("pass"), Created: time.Unix(0, 0), LastSeen: time.Unix(0, 0)},
-			},
-			wantErr: false,
-			fields:  fields{db: dbpg},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			a := &AuthStorePG{
-				db: tt.fields.db,
-			}
-			if err := a.UpdateUser(tt.args.ctx, tt.args.u); (err != nil) != tt.wantErr {
-				t.Errorf("AuthStorePG.UpdateUser() error = %v, wantErr %v", err, tt.wantErr)
-			}
-			updated, err := a.GetUserByID(context.Background(), tt.args.u.ID)
-			if err != nil {
-				t.Errorf("AuthStorePG.UpdateUser() error finding updated value: %v", err)
-			}
-			if !reflect.DeepEqual(tt.args.u, updated) {
-				t.Errorf("AuthStorePG.UpdateUser() error updated field does not match\nwant:%v\ngot: %v", tt.args.u, updated)
-			}
-		})
-	}
-}
+// func TestAuthStorePG_UpdateUser(t *testing.T) {
+// 	type fields struct {
+// 		db *pgxpool.Pool
+// 	}
+// 	type args struct {
+// 		ctx context.Context
+// 		u   *UserRow
+// 	}
+// 	tests := []struct {
+// 		name    string
+// 		fields  fields
+// 		args    args
+// 		wantErr bool
+// 	}{
+// 		{
+// 			name: "valid",
+// 			args: args{
+// 				ctx: context.Background(),
+// 				u:   &UserRow{ID: uuid.MustParse("b813c6e3-9cd0-4aed-9c4e-1d88ae20c777"), Email: "update@updated.test", Username: "updated", Birthdate: time.Unix(0, 0).UTC(), PasswordHash: []byte("pass"), Created: time.Unix(0, 0), LastSeen: time.Unix(0, 0)},
+// 			},
+// 			wantErr: false,
+// 			fields:  fields{db: dbpg},
+// 		},
+// 	}
+// 	for _, tt := range tests {
+// 		t.Run(tt.name, func(t *testing.T) {
+// 			a := &AuthStorePG{
+// 				db: tt.fields.db,
+// 			}
+// 			if err := a.UpdateUser(tt.args.ctx, tt.args.u); (err != nil) != tt.wantErr {
+// 				t.Errorf("AuthStorePG.UpdateUser() error = %v, wantErr %v", err, tt.wantErr)
+// 			}
+// 			updated, err := a.GetUserByID(context.Background(), tt.args.u.ID)
+// 			if err != nil {
+// 				t.Errorf("AuthStorePG.UpdateUser() error finding updated value: %v", err)
+// 			}
+// 			if !reflect.DeepEqual(tt.args.u, updated) {
+// 				t.Errorf("AuthStorePG.UpdateUser() error updated field does not match\nwant:%v\ngot: %v", tt.args.u, updated)
+// 			}
+// 		})
+// 	}
+// }
 
 func TestAuthStorePG_UpdateUserPassword(t *testing.T) {
 	type fields struct {
@@ -283,7 +283,7 @@ func TestAuthStorePG_UpdateUserPassword(t *testing.T) {
 			if err := a.UpdateUserPassword(tt.args.ctx, tt.args.id, tt.args.password_hash); (err != nil) != tt.wantErr {
 				t.Errorf("AuthStorePG.UpdateUserPassword() error = %v, wantErr %v", err, tt.wantErr)
 			}
-			updated, err := a.GetUserByID(context.Background(), tt.args.id)
+			updated, err := a.FindUserByID(context.Background(), tt.args.id)
 			if err != nil {
 				t.Errorf("AuthStorePG.UpdateUserPassword() error finding updated value: %v", err)
 			}
@@ -327,7 +327,7 @@ func TestAuthStorePG_DeleteUser(t *testing.T) {
 			if err := a.DeleteUser(tt.args.ctx, tt.args.id); (err != nil) != tt.wantErr {
 				t.Errorf("AuthStorePG.DeleteUser() error = %v, wantErr %v", err, tt.wantErr)
 			}
-			_, shouldErr := a.GetUserByID(context.Background(), tt.args.id)
+			_, shouldErr := a.FindUserByID(context.Background(), tt.args.id)
 			if shouldErr == nil {
 				t.Errorf("AuthStorePG.DeleteUser() found deleted entry")
 			}

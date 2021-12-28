@@ -51,6 +51,7 @@ type UserRow struct {
 	PasswordHash []byte
 	Created      time.Time
 	LastSeen     time.Time
+	Activated    bool
 }
 
 // SessionRow contains all session information

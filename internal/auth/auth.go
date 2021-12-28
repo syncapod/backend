@@ -49,7 +49,11 @@ func (a *AuthController) Login(ctx context.Context, username, password, agent st
 		return nil, nil, fmt.Errorf("AuthController.Login() error incorrect password")
 	}
 	user.PasswordHash = []byte{}
-	session := createSession(user.ID, agent)
+	session, err := createSession(user.ID, agent)
+	if err != nil {
+		return nil, nil, fmt.Errorf("AuthController.Login() error creating new session: %v", err)
+	}
+
 	err = a.authStore.InsertSession(context.Background(), session)
 	if err != nil {
 		return nil, nil, fmt.Errorf("AuthController.Login() error inserting new session: %v", err)
@@ -93,20 +97,39 @@ func (a *AuthController) Logout(ctx context.Context, sessionID uuid.UUID) error 
 	}
 	return nil
 }
+
 func (a *AuthController) CreateUser(ctx context.Context, email, username, pwd string, dob time.Time) (*db.UserRow, error) {
 	pwdHash, err := hash(pwd)
 	if err != nil {
 		return nil, fmt.Errorf("AuthController.CreateUser() error hashing password: %v", err)
 	}
 
-	newUser := &db.UserRow{ID: uuid.New(), Email: email, Username: username, Birthdate: dob, PasswordHash: pwdHash, Created: time.Now(), LastSeen: time.Now()}
+	newUUID, err := uuid.NewRandom()
+	if err != nil {
+		return nil, fmt.Errorf("AuthController.CreateUser() error genearting new UUID: %v", err)
+	}
+
+	newUser := &db.UserRow{
+		ID:           newUUID,
+		Email:        email,
+		Username:     username,
+		Birthdate:    dob,
+		PasswordHash: pwdHash,
+		Created:      time.Now(),
+		LastSeen:     time.Now(),
+		Activated:    false,
+	}
 	err = a.authStore.InsertUser(ctx, newUser)
 	if err != nil {
 		return nil, fmt.Errorf("AuthController.CreateUser() error inserting user into db: %v", err)
 	}
 
-	// TODO: add activated bool on db.UserRow
 	// TODO: generate activation token and send to the queue for email
+	activationToken, err := uuid.NewRandom()
+	if err != nil {
+		return nil, fmt.Errorf("AuthController.CreateUser() error generating UUID: %v", err)
+	}
+
 	return newUser, nil
 }
 
@@ -154,14 +177,18 @@ func compare(hash []byte, password string) bool {
 }
 
 // createSession creates a session
-func createSession(userID uuid.UUID, agent string) *db.SessionRow {
+func createSession(userID uuid.UUID, agent string) (*db.SessionRow, error) {
 	now := time.Now()
+	newUUID, err := uuid.NewRandom()
+	if err != nil {
+		return nil, err
+	}
 	return &db.SessionRow{
-		ID:           uuid.New(),
+		ID:           newUUID,
 		UserID:       userID,
 		Expires:      now.Add(time.Hour * 168),
 		LastSeenTime: now,
 		LoginTime:    now,
 		UserAgent:    agent,
-	}
+	}, nil
 }

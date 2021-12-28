@@ -85,7 +85,10 @@ func (c *RSSController) updatePodcast(pod *db.Podcast) error {
 	}
 
 	for e := range newPod.Channel.Items {
-		epi := rssItemToDBEpisode(&newPod.Channel.Items[e], pod.ID)
+		epi, err := rssItemToDBEpisode(&newPod.Channel.Items[e], pod.ID)
+		if err != nil {
+			return fmt.Errorf("updatePodcast() error converting rss item to db episode: %v", err)
+		}
 		// check if the latest episode is in collection
 		exists := c.podController.DoesEpisodeExist(context.Background(), pod.ID, epi.EnclosureURL)
 		if !exists {
@@ -113,7 +116,11 @@ func (c *RSSController) AddNewPodcast(url string, r io.Reader) (*db.Podcast, err
 	if err != nil {
 		return nil, err
 	}
-	pod, err := c.rssChannelToPodcast(&rssPod.Channel, uuid.New(), url)
+	newUUID, err := uuid.NewRandom()
+	if err != nil {
+		return nil, fmt.Errorf("AddNewPodcast() error generating UUID: %v", err)
+	}
+	pod, err := c.rssChannelToPodcast(&rssPod.Channel, newUUID, url)
 	if err != nil {
 		return nil, fmt.Errorf("AddNewPodcast() error converting rss: %v", err)
 	}
@@ -126,7 +133,10 @@ func (c *RSSController) AddNewPodcast(url string, r io.Reader) (*db.Podcast, err
 
 	// loop through episodes and save them
 	for i := range rssPod.Channel.Items {
-		epi := rssItemToDBEpisode(&rssPod.Channel.Items[i], pod.ID)
+		epi, err := rssItemToDBEpisode(&rssPod.Channel.Items[i], pod.ID)
+		if err != nil {
+			return nil, fmt.Errorf("AddNewPodcast() error converting rss item to db episode: %v", err)
+		}
 		err = c.podController.InsertEpisode(context.Background(), epi)
 		if err != nil {
 			log.Println("AddNewPodcast() couldn't insert episode: ", err)
@@ -320,7 +330,7 @@ func (c *RSSController) rssChannelToPodcast(r *rssChannel, id uuid.UUID, rssURL 
 	}, nil
 }
 
-func rssItemToDBEpisode(r *rssItem, podID uuid.UUID) *db.Episode {
+func rssItemToDBEpisode(r *rssItem, podID uuid.UUID) (*db.Episode, error) {
 	enclosureLen, err := strconv.ParseInt(r.Enclosure.Length, 10, 64)
 	if err != nil {
 		log.Println("rssItemToDBEpisode() error parsing enclosure length:", err)
@@ -336,8 +346,13 @@ func rssItemToDBEpisode(r *rssItem, podID uuid.UUID) *db.Episode {
 	episode, _ := strconv.Atoi(r.Episode)
 	season, _ := strconv.Atoi(r.Season)
 
+	newUUID, err := uuid.NewRandom()
+	if err != nil {
+		return nil, err
+	}
+
 	return &db.Episode{
-		ID:              uuid.New(),
+		ID:              newUUID,
 		Title:           r.Title,
 		EnclosureURL:    r.Enclosure.URL,
 		EnclosureLength: enclosureLen,
@@ -356,5 +371,5 @@ func rssItemToDBEpisode(r *rssItem, podID uuid.UUID) *db.Episode {
 		Subtitle:        r.Subtitle,
 		Encoded:         r.Encoded,
 		PodcastID:       podID,
-	}
+	}, nil
 }
