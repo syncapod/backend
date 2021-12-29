@@ -5,7 +5,10 @@ WORKDIR /app
 # Dependency management
 COPY go.* /app/
 RUN go mod download
-COPY . /app
+# Copy required folders for build
+# COPY . /app
+COPY ./internal ./internal
+COPY ./cmd ./cmd
 RUN go build -o /app/main cmd/main.go
 
 # Final docker container

@@ -23,6 +23,7 @@ services:
             - /certs:/certs
         networks:
             - backend
+            - syncapod_mail_net
         ports:
             - "80:80"
             - "443:443"
@@ -36,3 +37,6 @@ networks:
     backend:
         driver: bridge
         name: backend
+    syncapod_mail_net:
+        external: true
+        name: syncapod_mail_net

@@ -19,6 +19,7 @@ import (
 	"github.com/sschwartz96/syncapod-backend/internal/twirp"
 
 	"github.com/sschwartz96/syncapod-backend/internal/handler"
+	"github.com/sschwartz96/syncapod-backend/internal/mail"
 	"github.com/sschwartz96/syncapod-backend/internal/podcast"
 	"golang.org/x/crypto/acme/autocert"
 )
@@ -106,8 +107,15 @@ func main() {
 	// setup handler
 	handler, err := handler.CreateHandler(cfg, authController, podController)
 	if err != nil {
-		log.Fatal("could not setup handlers: ", err)
+		log.Fatalln("could not setup handlers: ", err)
 	}
+
+	// setup mail client
+	mailClient, err := mail.NewMailer(cfg, certMan.TLSConfig())
+	if err != nil {
+		log.Fatalln("could not setup mail client:", err)
+	}
+	log.Println(*mailClient)
 
 	// debug TODO: remove
 	if cfg.Debug || true {
@@ -140,7 +148,7 @@ func createCertManager(cfg *config.Config) *autocert.Manager {
 		return &autocert.Manager{
 			Prompt:     autocert.AcceptTOS,
 			Cache:      autocert.DirCache(cfg.CertDir),
-			HostPolicy: autocert.HostWhitelist("syncapod.com", "mail.syncapod.com", "www.syncapod.com", "45.79.25.193"),
+			HostPolicy: autocert.HostWhitelist("syncapod.com", "mail.syncapod.com", "www.syncapod.com", "45.79.25.193", "mta-sts.syncapod.com"),
 			Email:      "sam.schwartz96@gmail.com",
 		}
 	}

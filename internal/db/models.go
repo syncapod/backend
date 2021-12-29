@@ -10,10 +10,10 @@ import (
 type AuthStore interface {
 	// User
 	InsertUser(ctx context.Context, u *UserRow) error
-	GetUserByID(ctx context.Context, id uuid.UUID) (*UserRow, error)
-	GetUserByEmail(ctx context.Context, email string) (*UserRow, error)
-	GetUserByUsername(ctx context.Context, username string) (*UserRow, error)
-	UpdateUser(ctx context.Context, u *UserRow) error
+	FindUserByID(ctx context.Context, id uuid.UUID) (*UserRow, error)
+	FindUserByEmail(ctx context.Context, email string) (*UserRow, error)
+	FindUserByUsername(ctx context.Context, username string) (*UserRow, error)
+	// UpdateUser(ctx context.Context, u *UserRow) error
 	UpdateUserPassword(ctx context.Context, id uuid.UUID, password_hash []byte) error
 	DeleteUser(ctx context.Context, id uuid.UUID) error
 

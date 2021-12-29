@@ -39,6 +39,12 @@ type Config struct {
 	Production      bool   `json:"production"`
 	CertDir         string `json:"cert_dir"` // only used if production=true
 	Debug           bool   `json:"debug"`
+
+	// for Mail package
+	SMTPHost     string `json:"smtp_host"`
+	SMTPPort     int    `json:"smtp_port"`
+	SMTPUser     string `json:"smtp_user"`
+	SMTPPassword string `json:"smtp_password"`
 }
 
 // ReadConfig reads the config file encoded in JSON

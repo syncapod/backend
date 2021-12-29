@@ -64,6 +64,9 @@ func (a *AuthService) CreateAccount(ctx context.Context, req *protos.CreateAccou
 // ResetPassword method is called when user forgets password
 func (a *AuthService) ResetPassword(ctx context.Context, req *protos.ResetPasswordReq) (*protos.ResetPasswordRes, error) {
 	err := a.ac.ResetPassword(ctx, req.Email)
+	if err != nil {
+		return nil, err
+	}
 	return &protos.ResetPasswordRes{}, nil
 }
 

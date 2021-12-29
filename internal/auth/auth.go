@@ -125,16 +125,16 @@ func (a *AuthController) CreateUser(ctx context.Context, email, username, pwd st
 	}
 
 	// TODO: generate activation token and send to the queue for email
-	activationToken, err := uuid.NewRandom()
-	if err != nil {
-		return nil, fmt.Errorf("AuthController.CreateUser() error generating UUID: %v", err)
-	}
+	// activationToken, err := uuid.NewRandom()
+	// if err != nil {
+	// 	return nil, fmt.Errorf("AuthController.CreateUser() error generating UUID: %v", err)
+	// }
 
 	return newUser, nil
 }
 
 func (a *AuthController) ResetPassword(ctx context.Context, email string) error {
-	user, err := a.authStore.GetUserByEmail(ctx, email)
+	user, err := a.authStore.FindUserByEmail(ctx, email)
 	if err != nil {
 		return err
 	}
@@ -151,9 +151,9 @@ func (a *AuthController) findUserByEmailOrUsername(ctx context.Context, u string
 	var user *db.UserRow
 	var err error
 	if strings.Contains(u, "@") {
-		user, err = a.authStore.GetUserByEmail(ctx, u)
+		user, err = a.authStore.FindUserByEmail(ctx, u)
 	} else {
-		user, err = a.authStore.GetUserByUsername(ctx, u)
+		user, err = a.authStore.FindUserByUsername(ctx, u)
 	}
 	if err != nil {
 		return nil, err
