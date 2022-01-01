@@ -23,8 +23,8 @@ func scanUserRow(row scanner, u *UserRow) error {
 // User
 func (a *AuthStorePG) InsertUser(ctx context.Context, u *UserRow) error {
 	_, err := a.db.Exec(ctx,
-		"INSERT INTO Users (id,email,username,birthdate,password_hash, created, last_seen, activated) VALUES($1,$2,$3,$4,$5,$6,$7,$8)",
-		&u.ID, &u.Email, &u.Username, &u.Birthdate, &u.PasswordHash, &u.Created, &u.LastSeen)
+		"INSERT INTO Users (id,email,username,birthdate,password_hash,created,last_seen,activated) VALUES($1,$2,$3,$4,$5,$6,$7,$8)",
+		&u.ID, &u.Email, &u.Username, &u.Birthdate, &u.PasswordHash, &u.Created, &u.LastSeen, &u.Activated)
 	if err != nil {
 		return fmt.Errorf("InsertUser() error: %v", err)
 	}
@@ -139,7 +139,7 @@ func (a *AuthStorePG) GetSessionAndUser(ctx context.Context, sessionID uuid.UUID
 	)
 	err := result.Scan(
 		&s.ID, &s.UserID, &s.LoginTime, &s.LastSeenTime, &s.Expires, &s.UserAgent,
-		&u.ID, &u.Email, &u.Username, &u.Birthdate, &u.PasswordHash, &u.Created, &u.LastSeen,
+		&u.ID, &u.Email, &u.Username, &u.Birthdate, &u.PasswordHash, &u.Created, &u.LastSeen, &u.Activated,
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("GetSessionAndUser() error: %v", err)

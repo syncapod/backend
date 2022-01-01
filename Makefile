@@ -32,8 +32,11 @@ testv:
 coverage:
 	go test ./... -cover
 
-sync:
+deploy:
+	go test ./internal/...
 	rsync -a --exclude config.json --exclude .env . root@syncapod.com:/root/syncapod
+	ssh root@syncapod.com /usr/bin/docker-compose --project-directory /root/syncapod down
+	ssh root@syncapod.com /usr/bin/docker-compose --project-directory /root/syncapod up --build -d
 
 protos:
 	protoc -I $(PROTO_DIR) \

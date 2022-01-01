@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/google/uuid"
+	"github.com/julienschmidt/httprouter"
 	"github.com/sschwartz96/syncapod-backend/internal/auth"
 	"github.com/sschwartz96/syncapod-backend/internal/db"
 	protos "github.com/sschwartz96/syncapod-backend/internal/gen"
@@ -18,28 +19,32 @@ import (
 const (
 	authTokenKey = "Auth_Token"
 	userIDKey    = "User_ID"
+	prefix       = "/rpc"
+)
+
+var (
+	excludedMethods = []string{"Authenticate", "Authorize", "CreateAccount", "ResetPassword"}
 )
 
 // Server is truly needed for its Intercept method which authenticates users before accessing services, but also useful to have all the grpc server boilerplate contained within NewServer function
 type Server struct {
 	authC    *auth.AuthController
-	services []TwirpService
+	services []service
 }
 
-type TwirpService struct {
+type service struct {
 	name        string
 	twirpServer protos.TwirpServer
 }
 
-func NewServer(a *autocert.Manager, aC *auth.AuthController, aS protos.Auth, pS protos.Pod, adminS protos.Admin) *Server {
+func NewServer(aC *auth.AuthController, aS protos.Auth, pS protos.Pod, adminS protos.Admin) *Server {
 	s := &Server{authC: aC}
-	twirpServices := []TwirpService{
+	twirpServices := []service{
 		{
 			name: "admin",
 			twirpServer: protos.NewAdminServer(
 				adminS,
-				twirp.WithServerPathPrefix("/rpc/admin"),
-				// twirp.WithServerInterceptors(s.authIntercept()),
+				twirp.WithServerPathPrefix(prefix),
 				twirp.WithServerHooks(s.authorizeHook()),
 			),
 		},
@@ -47,8 +52,7 @@ func NewServer(a *autocert.Manager, aC *auth.AuthController, aS protos.Auth, pS 
 			name: "auth",
 			twirpServer: protos.NewAuthServer(
 				aS,
-				twirp.WithServerPathPrefix("/rpc/auth"),
-				// twirp.WithServerInterceptors(s.authIntercept()),
+				twirp.WithServerPathPrefix(prefix),
 				twirp.WithServerHooks(s.authorizeHook()),
 			),
 		},
@@ -56,8 +60,7 @@ func NewServer(a *autocert.Manager, aC *auth.AuthController, aS protos.Auth, pS 
 			name: "podcast",
 			twirpServer: protos.NewPodServer(
 				pS,
-				twirp.WithServerPathPrefix("/rpc/podcast"),
-				// twirp.WithServerInterceptors(s.authIntercept()),
+				twirp.WithServerPathPrefix(prefix),
 				twirp.WithServerHooks(s.authorizeHook()),
 			),
 		},
@@ -65,44 +68,6 @@ func NewServer(a *autocert.Manager, aC *auth.AuthController, aS protos.Auth, pS 
 	s.services = twirpServices
 	return s
 }
-
-// could use this instead of hooks?
-// func (s *Server) authIntercept() twirp.Interceptor {
-// 	return func(next twirp.Method) twirp.Method {
-// 		return func(ctx context.Context, req interface{}) (interface{}, error) {
-// 			// get the method name
-// 			methodName, ok := twirp.MethodName(ctx)
-// 			if !ok {
-// 				return nil, twirp.NotFound.Error("Auth Intercept, Method Not Found")
-// 			}
-// 			// if Authenticate method then allow the method to proceed
-// 			if methodName == "Authenticate" {
-// 				return next(ctx, req)
-// 			}
-
-// 			// check for header and auth token
-// 			header, ok := twirp.HTTPRequestHeaders(ctx)
-// 			if !ok {
-// 				return nil, twirp.NotFound.Error("Auth Intercept, HTTP Header Not Present")
-// 			}
-
-// 			authTokenString := header.Get(authTokenKey)
-// 			authToken, err := uuid.Parse(authTokenString)
-// 			if err != nil {
-// 				return ctx, twirp.Unauthenticated.Error("")
-// 			}
-// 			user, err := s.authC.Authorize(ctx, authToken)
-// 			if err != nil {
-// 				return ctx, twirp.Unauthenticated.Error("")
-// 			}
-// 			ctx = context.WithValue(ctx, twirpContextKey{}, twirpContextValue{
-// 				authToken: authToken,
-// 				user:      user,
-// 			})
-// 			return next(ctx, req)
-// 		}
-// 	}
-// }
 
 func (s *Server) authorizeHook() *twirp.ServerHooks {
 	hooks := &twirp.ServerHooks{}
@@ -113,7 +78,7 @@ func (s *Server) authorizeHook() *twirp.ServerHooks {
 			return ctx, twirp.NotFound.Error("Auth Hook, Method Not Found")
 		}
 		// allow certain RPC methods to go through
-		if methodName == "Authenticate" || methodName == "CreateAccount" || methodName == "ResetPassword" {
+		if in(methodName, excludedMethods) {
 			return ctx, nil
 		}
 
@@ -166,9 +131,19 @@ func (s *Server) Start() error {
 	mux := http.NewServeMux()
 	for _, service := range s.services {
 		mux.Handle(service.twirpServer.PathPrefix(), withAuthTokenMiddleware(service.twirpServer))
-		// mux.Handle(service.twirpServer.PathPrefix(), service.twirpServer)
 	}
 	return http.ListenAndServe(":8081", mux)
+}
+
+func (s *Server) RegisterRouter(router *httprouter.Router) *httprouter.Router {
+	for _, service := range s.services {
+		router.POST(
+			service.twirpServer.PathPrefix()+":method",
+			toHttpRouterHandle(withAuthTokenMiddleware(service.twirpServer)),
+		)
+		// router.Handle(service.twirpServer.PathPrefix(), withAuthTokenMiddleware(service.twirpServer))
+	}
+	return router
 }
 
 func getCredsOpt(a *autocert.Manager) grpc.ServerOption {
@@ -181,4 +156,19 @@ func getCredsOpt(a *autocert.Manager) grpc.ServerOption {
 		)
 	}
 	return grpc.EmptyServerOption{}
+}
+
+func toHttpRouterHandle(handlerFunc http.HandlerFunc) httprouter.Handle {
+	return func(res http.ResponseWriter, req *http.Request, p httprouter.Params) {
+		handlerFunc(res, req)
+	}
+}
+
+func in(s string, list []string) bool {
+	for _, val := range list {
+		if s == val {
+			return true
+		}
+	}
+	return false
 }

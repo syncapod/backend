@@ -15,8 +15,8 @@ import (
 
 // Handler is the main handler for syncapod, all routes go through it
 type Handler struct {
-	oauthHandler *OauthHandler
-	alexaHandler *AlexaHandler
+	OAuthHandler *OauthHandler
+	AlexaHandler *AlexaHandler
 }
 
 // CreateHandler sets up the main handler
@@ -32,25 +32,11 @@ func CreateHandler(cfg *config.Config, authC auth.Auth, podCon *podcast.PodContr
 		return nil, fmt.Errorf("CreateHandler() error creating oauthHandler: %v", err)
 	}
 	alexaHandler := CreateAlexaHandler(authC, podCon)
-	return &Handler{oauthHandler: oauthHandler, alexaHandler: alexaHandler}, nil
+	return &Handler{OAuthHandler: oauthHandler, AlexaHandler: alexaHandler}, nil
 }
 
 // ServeHTTP handles all requests
 func (h *Handler) ServeHTTP(res http.ResponseWriter, req *http.Request) {
-	// first check for mta-sts subdomain
-	// MTA-STS doc: https://maddy.email/tutorials/setting-up/
-	host := strings.TrimSpace(strings.ToLower(req.Host))
-	if strings.HasPrefix(host, "mta-sts") {
-		if strings.HasSuffix(req.URL.Path, "/.well-known/mta-sts.txt") {
-			res.Write([]byte(`version: STSv1
-mode: enforce
-max_age: 604800
-mx: mail.syncapod.com`))
-			return
-		}
-		res.Write([]byte("404 Page not Found"))
-		return
-	}
 
 	// normal routing
 	var head string
@@ -58,10 +44,25 @@ mx: mail.syncapod.com`))
 
 	switch head {
 	case "oauth":
-		h.oauthHandler.ServeHTTP(res, req)
+		h.OAuthHandler.ServeHTTP(res, req)
 	case "api":
 		h.serveAPI(res, req)
 	}
+}
+
+func (h *Handler) MtaSts(res http.ResponseWriter, req *http.Request) {
+	// MTA-STS doc: https://maddy.email/tutorials/setting-up/
+	host := strings.TrimSpace(strings.ToLower(req.Host))
+	// check for mta-sts subdomain
+	if strings.HasPrefix(host, "mta-sts") {
+		res.Write([]byte("version: STSv1\n" +
+			"mode: enforce\n" +
+			"max_age: 604800\n" +
+			"mx: mail.syncapod.com\n"),
+		)
+		return
+	}
+	res.Write([]byte("404 Page not Found"))
 }
 
 func (h *Handler) serveAPI(res http.ResponseWriter, req *http.Request) {
@@ -70,7 +71,7 @@ func (h *Handler) serveAPI(res http.ResponseWriter, req *http.Request) {
 
 	switch head {
 	case "alexa":
-		h.alexaHandler.Alexa(res, req)
+		h.AlexaHandler.Alexa(res, req)
 	case "actions":
 		log.Println("actions req")
 		log.Println(ioutil.ReadAll(req.Body))

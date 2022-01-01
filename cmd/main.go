@@ -13,10 +13,13 @@ import (
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/jackc/pgx/v4/pgxpool"
+	"github.com/julienschmidt/httprouter"
 	"github.com/sschwartz96/syncapod-backend/internal/auth"
 	"github.com/sschwartz96/syncapod-backend/internal/config"
 	"github.com/sschwartz96/syncapod-backend/internal/db"
 	"github.com/sschwartz96/syncapod-backend/internal/twirp"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 
 	"github.com/sschwartz96/syncapod-backend/internal/handler"
 	"github.com/sschwartz96/syncapod-backend/internal/mail"
@@ -25,12 +28,24 @@ import (
 )
 
 func main() {
-	log.Println("Running syncapod")
-
 	// read config
 	cfg, err := readConfig("config.json")
 	if err != nil {
-		log.Fatal("Main() error, could not read config: ", err)
+		log.Fatalln("could not read config:", err)
+	}
+
+	// create logger
+	var logger *zap.Logger
+	if cfg.Debug {
+		zCfg := zap.NewDevelopmentConfig()
+		zCfg.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
+		logger, err = zCfg.Build()
+		// logger, err = zap.NewDevelopment(zCfg)
+	} else {
+		logger, err = zap.NewProduction()
+	}
+	if err != nil {
+		log.Fatalln("could not initiate logger:", err)
 	}
 
 	// manage certificate
@@ -41,25 +56,39 @@ func main() {
 	defer cncFn()
 
 	// connect to db
-	log.Println("connecting to db")
+	logger.Info("connecting to db")
 
 	pgURI := fmt.Sprintf("postgresql://%s:%s@%s:%d/%s?sslmode=disable",
 		cfg.DbUser, url.QueryEscape(cfg.DbPass), cfg.DbHost, cfg.DbPort, cfg.DbName)
-	log.Println("pgURI:", pgURI)
+
 	pgdb, err := pgxpool.Connect(ctx, pgURI)
 	if err != nil {
-		log.Fatalf("couldn't connect to db: %v", err)
+		logger.Fatal("could not connect to db", zap.Error(err))
 	}
 
 	// run migrations
 	mig, err := migrate.New("file://"+cfg.MigrationsDir, pgURI)
 	if err != nil {
-		log.Fatalf("couldn't create migrate struct : %v", err)
+		logger.Fatal("error creating migrations", zap.Error(err))
 	}
 	err = mig.Up()
 	if err != nil && err.Error() != "no change" {
-		log.Fatalf("couldn't run migrations: %v", err)
+		logger.Fatal("error running startup db migration", zap.Error(err))
 	}
+
+	// setup mail client
+	mailer, err := mail.NewMailer(cfg, logger)
+	if err != nil {
+		logger.Fatal("could not setup mail client", zap.Error(err))
+	}
+	go func() {
+		logger.Info("starting mail consumer")
+		err := mailer.Start()
+		if err != nil {
+			logger.Error("mail consumer failed to start up", zap.Error(err))
+		}
+	}()
+	mailer.Queue("sam.schwartz96@gmail.com", "Syncapod Starting Up", "This message is to inform that the Syncapod application has started up at"+time.Now().String())
 
 	// setup stores
 	authStore := db.NewAuthStorePG(pgdb)
@@ -67,55 +96,44 @@ func main() {
 	podStore := db.NewPodcastStore(pgdb)
 
 	// setup controllers
-	authController := auth.NewAuthController(authStore, oauthStore)
+	authController := auth.NewAuthController(authStore, oauthStore, mailer)
 	podController, err := podcast.NewPodController(podStore)
 	if err != nil {
-		log.Fatalf("main() error setting up pod controller: %v", err)
+		logger.Fatal("error setting up pod controller", zap.Error(err))
 	}
 	rssController := podcast.NewRSSController(podController)
 
-	// setup grpc services
-	gAuthService := twirp.NewAuthService(authController)
-	gPodService := twirp.NewPodcastService(podController)
-	gAdminService := twirp.NewAdminService(podController, rssController)
+	// setup twirp services
+	tAuthService := twirp.NewAuthService(authController)
+	tPodService := twirp.NewPodcastService(podController)
+	tAdminService := twirp.NewAdminService(podController, rssController)
 
 	// setup & start gRPC server
-	grpcServer := twirp.NewServer(certMan,
+	twirpServer := twirp.NewServer(
 		authController,
-		gAuthService,
-		gPodService,
-		gAdminService,
+		tAuthService,
+		tPodService,
+		tAdminService,
 	)
 
-	if err != nil {
-		log.Fatalf("failed to create grpc auth handler endpoint\n%v\n", err)
-	}
-
-	go func() {
-		// start server
-		err = grpcServer.Start()
-		if err != nil {
-			log.Fatalf("main.twirp error starting server: %v", err)
-		}
-	}()
+	// 	go func() {
+	// 		// start server
+	// 		err = twirpServer.Start()
+	// 		if err != nil {
+	// 			logger.Fatal("error starting up twirp server", zap.Error(err))
+	// 		}
+	// 	}()
 
 	// start updating podcasts
-	go updatePodcasts(rssController)
+	go updatePodcasts(logger, rssController)
 
-	log.Println("setting up handlers")
+	logger.Info("setting up handlers")
 
-	// setup handler
-	handler, err := handler.CreateHandler(cfg, authController, podController)
+	// setup defaultHandler
+	defaultHandler, err := handler.CreateHandler(cfg, authController, podController)
 	if err != nil {
-		log.Fatalln("could not setup handlers: ", err)
+		logger.Fatal("could not setup handlers", zap.Error(err))
 	}
-
-	// setup mail client
-	mailClient, err := mail.NewMailer(cfg, certMan.TLSConfig())
-	if err != nil {
-		log.Fatalln("could not setup mail client:", err)
-	}
-	log.Println(*mailClient)
 
 	// debug TODO: remove
 	if cfg.Debug || true {
@@ -130,15 +148,17 @@ func main() {
 		podID, err := rssController.AddNewPodcast("https://feeds.twit.tv/twit.xml", r)
 		if err != nil {
 			log.Printf("failed to add debug podcast: %v\n", err)
+		} else {
+			log.Println("podID:", podID)
 		}
-		log.Println("podID:", podID)
 	}
 
 	// start server
-	log.Println("starting server")
-	err = startServer(cfg, certMan, handler)
+	newRouter := registerRoutes(defaultHandler, twirpServer)
+	logger.Info("starting server")
+	err = startServer(cfg, logger, certMan, newRouter)
 	if err != nil {
-		log.Fatalf("server error: %v", err)
+		logger.Fatal("startServer error", zap.Error(err))
 	}
 
 }
@@ -155,11 +175,11 @@ func createCertManager(cfg *config.Config) *autocert.Manager {
 	return nil
 }
 
-func updatePodcasts(rssController *podcast.RSSController) {
+func updatePodcasts(logger *zap.Logger, rssController *podcast.RSSController) {
 	for {
 		err := rssController.UpdatePodcasts()
 		if err != nil {
-			log.Println("main/updatePodcasts() error:", err)
+			logger.Error("main/updatePodcasts() error:", zap.Error(err))
 		}
 		time.Sleep(time.Minute * 15)
 	}
@@ -173,21 +193,65 @@ func readConfig(path string) (*config.Config, error) {
 	return config.ReadConfig(cfgFile)
 }
 
-func startServer(cfg *config.Config, a *autocert.Manager, h *handler.Handler) error {
+func toHttpRouterHandle(handlerFunc http.HandlerFunc) httprouter.Handle {
+	return func(res http.ResponseWriter, req *http.Request, p httprouter.Params) {
+		log.Println(p)
+		handlerFunc(res, req)
+	}
+}
+
+func registerRoutes(h *handler.Handler, t *twirp.Server) *httprouter.Router {
+	router := httprouter.New()
+
+	// oauth
+	router.GET("/oauth/login", toHttpRouterHandle(h.OAuthHandler.LoginGet))
+	router.POST("/oauth/login", toHttpRouterHandle(h.OAuthHandler.LoginPost))
+	router.GET("/oauth/authorize", toHttpRouterHandle(h.OAuthHandler.AuthorizeGet))
+	router.POST("/oauth/authorize", toHttpRouterHandle(h.OAuthHandler.AuthorizePost))
+	router.POST("/oauth/token", toHttpRouterHandle(h.OAuthHandler.Token))
+
+	// TODO: refresh Alexa commands
+	router.GET("/api/alex", toHttpRouterHandle(h.AlexaHandler.Alexa))
+	router.POST("/api/alex", toHttpRouterHandle(h.AlexaHandler.Alexa))
+
+	// mta-sts.syncapod.com validation
+	router.GET("/.well-known/mta-sts.txt", toHttpRouterHandle(h.MtaSts))
+
+	// twirp - /rpc/*
+	router = t.RegisterRouter(router)
+	return router
+}
+
+func startServer(cfg *config.Config, logger *zap.Logger, a *autocert.Manager, router *httprouter.Router) error {
 	// check if we are production
 	if cfg.Production {
 		// run http server to redirect traffic and handle cert renewal
 		go func() {
-			log.Fatal(http.ListenAndServe(":http", a.HTTPHandler(nil)))
+			err := http.ListenAndServe(":http", a.HTTPHandler(nil))
+			logger.Fatal("error starting up http redirect listener", zap.Error(err))
 		}()
 		// create server
 		s := &http.Server{
-			Addr:      ":https",
-			TLSConfig: a.TLSConfig(),
-			Handler:   h,
+			Addr:         ":https",
+			TLSConfig:    a.TLSConfig(),
+			Handler:      router,
+			ReadTimeout:  time.Second * 15,
+			WriteTimeout: time.Second * 15,
+			ErrorLog:     log.New(&httpErrorToZap{logger}, "", 0), // TODO: create struct that contains Write([]byte) function to "convert" to zap.logger
 		}
 		return s.ListenAndServeTLS("", "")
 	} else {
-		return http.ListenAndServe(fmt.Sprintf(":%d", cfg.Port), h)
+		// just standup a default server
+		return http.ListenAndServe(fmt.Sprintf(":%d", cfg.Port), router)
 	}
+}
+
+type httpErrorToZap struct {
+	logger *zap.Logger
+}
+
+func (t *httpErrorToZap) Write(p []byte) (int, error) {
+	// t.logger.Error("http server error", zap.Error(errors.New(string(p))))
+	t.logger.Info("http server error", zap.String("error", string(p)))
+	return len(p), nil
 }

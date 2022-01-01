@@ -47,7 +47,15 @@ func TestMain(m *testing.M) {
 }
 
 func TestAuthStorePG_InsertUser(t *testing.T) {
-	u := UserRow{ID: uuid.MustParse("a813c6e3-9cd0-4aed-9c4e-1d78ae20c8ba"), Email: "testInsert@test.test", Username: "testInsert", Birthdate: time.Now(), PasswordHash: []byte("pass")}
+	u := UserRow{
+		ID:           uuid.MustParse("a813c6e3-9cd0-4aed-9c4e-1d78ae20c8ba"),
+		Email:        "testInsert@test.test",
+		Username:     "testInsert",
+		Birthdate:    time.Now(),
+		PasswordHash: []byte("pass"),
+		Created:      time.Time{},
+		LastSeen:     time.Time{},
+	}
 	type fields struct {
 		db *pgxpool.Pool
 	}

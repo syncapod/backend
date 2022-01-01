@@ -70,7 +70,7 @@ func Test_PodcastGRPC(t *testing.T) {
 		t.Fatalf("Twirp could not add add headers: %v", err)
 	}
 
-	client := protos.NewPodProtobufClient("http://localhost:8081", http.DefaultClient, twirp.WithClientPathPrefix("/rpc/podcast"))
+	client := protos.NewPodProtobufClient("http://localhost:8081", http.DefaultClient, twirp.WithClientPathPrefix(prefix))
 
 	// GetPodcast
 	pod, err := client.GetPodcast(ctx, &protos.GetPodReq{Id: testPod.ID.String()})

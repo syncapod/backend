@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/sschwartz96/syncapod-backend/internal/db"
+	"github.com/sschwartz96/syncapod-backend/internal/mail"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -31,10 +32,11 @@ type Auth interface {
 type AuthController struct {
 	authStore  db.AuthStore
 	oauthStore db.OAuthStore
+	mailer     *mail.Mailer
 }
 
-func NewAuthController(aStore db.AuthStore, oStore db.OAuthStore) *AuthController {
-	return &AuthController{authStore: aStore, oauthStore: oStore}
+func NewAuthController(aStore db.AuthStore, oStore db.OAuthStore, mailer *mail.Mailer) *AuthController {
+	return &AuthController{authStore: aStore, oauthStore: oStore, mailer: mailer}
 }
 
 // Login queries db for user and validates password.
@@ -124,11 +126,12 @@ func (a *AuthController) CreateUser(ctx context.Context, email, username, pwd st
 		return nil, fmt.Errorf("AuthController.CreateUser() error inserting user into db: %v", err)
 	}
 
-	// TODO: generate activation token and send to the queue for email
-	// activationToken, err := uuid.NewRandom()
-	// if err != nil {
-	// 	return nil, fmt.Errorf("AuthController.CreateUser() error generating UUID: %v", err)
-	// }
+	activationToken, err := uuid.NewRandom()
+	if err != nil {
+		return nil, fmt.Errorf("AuthController.CreateUser() error generating UUID: %v", err)
+	}
+	// TODO: template email and add db insert for activation token
+	a.mailer.Queue(newUser.Email, "Please Activate Your syncapod.com Account", "Token: "+activationToken.String()) // TODO: create html email template
 
 	return newUser, nil
 }
@@ -136,11 +139,16 @@ func (a *AuthController) CreateUser(ctx context.Context, email, username, pwd st
 func (a *AuthController) ResetPassword(ctx context.Context, email string) error {
 	user, err := a.authStore.FindUserByEmail(ctx, email)
 	if err != nil {
-		return err
+		return fmt.Errorf("AuthController.ResetPassword() error finding user by email: %w", err)
 	}
-	// TODO: generate reset token
-	//		 then send to the queue to send email with link
-	log.Println(user)
+	activationToken, err := uuid.NewRandom()
+	if err != nil {
+		return fmt.Errorf("AuthController.ResetPassword() error finding user by email: %w", err)
+	}
+
+	// TODO: template email and add db insert for password reset
+	a.mailer.Queue(user.Email, "Reset Password", "Click this link to reset your syncapod.com password\nToken: "+activationToken.String())
+
 	return nil
 }
 

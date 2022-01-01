@@ -47,22 +47,23 @@ func (h *OauthHandler) ServeHTTP(res http.ResponseWriter, req *http.Request) {
 	head, req.URL.Path = ShiftPath(req.URL.Path)
 	switch head {
 	case "login":
-		h.Login(res, req)
+		h.LoginPost(res, req)
 	case "authorize":
-		h.Authorize(res, req)
+		h.AuthorizePost(res, req)
 	case "token":
 		h.Token(res, req)
 	}
 }
 
-// Login handles the post and get request of a login page
-func (h *OauthHandler) Login(res http.ResponseWriter, req *http.Request) {
-	if req.Method == http.MethodGet {
-		if err := h.loginTemplate.Execute(res, false); err != nil {
-			log.Printf("OauthHandler.Login() error executing loginTemplate: %v\n", err)
-		}
-		return
+// LoginGet returns the login page at /oauth/login
+func (h *OauthHandler) LoginGet(res http.ResponseWriter, req *http.Request) {
+	if err := h.loginTemplate.Execute(res, false); err != nil {
+		log.Printf("OauthHandler.Login() error executing loginTemplate: %v\n", err)
 	}
+}
+
+// LoginPost handles post request of the login endpoint
+func (h *OauthHandler) LoginPost(res http.ResponseWriter, req *http.Request) {
 	err := req.ParseForm()
 	if err != nil {
 		fmt.Println("couldn't parse post values: ", err)
@@ -92,16 +93,16 @@ func (h *OauthHandler) Login(res http.ResponseWriter, req *http.Request) {
 	http.Redirect(res, req, "/oauth/authorize"+"?"+values.Encode(), http.StatusSeeOther)
 }
 
-// Authorize takes a session(access) token and validates it and sents back user info
-func (h *OauthHandler) Authorize(res http.ResponseWriter, req *http.Request) {
-	if req.Method == http.MethodGet {
-		err := h.authTemplate.Execute(res, nil)
-		if err != nil {
-			fmt.Println("OauthHandler.Authorize() error executing template:", err)
-		}
-		return
+// AuthorizeGet returns the webpage at /oauth/authorize
+func (h *OauthHandler) AuthorizeGet(res http.ResponseWriter, req *http.Request) {
+	err := h.authTemplate.Execute(res, nil)
+	if err != nil {
+		fmt.Println("OauthHandler.Authorize() error executing template:", err)
 	}
+}
 
+// AuthorizePost takes a session(access) token and validates it and sents back user info
+func (h *OauthHandler) AuthorizePost(res http.ResponseWriter, req *http.Request) {
 	// setup redirect url
 	redirectURI := strings.TrimSpace(req.URL.Query().Get("redirect_uri"))
 	// add query params

@@ -84,6 +84,20 @@ type AccessTokenRow struct {
 	Expires      int       `json:"expires"`
 }
 
+// ActivationRow contains information for user account activation
+type ActivationRow struct {
+	Token   uuid.UUID `json:"token"`
+	UserID  uuid.UUID `json:"user_id"`
+	Expires time.Time `json:"expires"`
+}
+
+// PasswordResetRow contains information for user account activation
+type PasswordResetRow struct {
+	Token   uuid.UUID `json:"token"`
+	UserID  uuid.UUID `json:"user_id"`
+	Expires time.Time `json:"expires"`
+}
+
 // Scope contains identifiers to oAuth permissions
 type Scope string
 
