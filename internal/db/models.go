@@ -16,6 +16,14 @@ type AuthStore interface {
 	// UpdateUser(ctx context.Context, u *UserRow) error
 	UpdateUserPassword(ctx context.Context, id uuid.UUID, password_hash []byte) error
 	DeleteUser(ctx context.Context, id uuid.UUID) error
+	// Password Reset
+	InsertPasswordReset(ctx context.Context, p *PasswordResetRow) error
+	FindPasswordReset(ctx context.Context, token uuid.UUID) (*PasswordResetRow, error)
+	DeletePasswordReset(ctx context.Context, token uuid.UUID) error
+	// User Activation
+	InsertActivation(ctx context.Context, p *ActivationRow) error
+	FindActivation(ctx context.Context, token uuid.UUID) (*ActivationRow, error)
+	DeleteActivation(ctx context.Context, token uuid.UUID) error
 
 	// Session
 	InsertSession(ctx context.Context, s *SessionRow) error
@@ -91,7 +99,7 @@ type ActivationRow struct {
 	Expires time.Time `json:"expires"`
 }
 
-// PasswordResetRow contains information for user account activation
+// PasswordResetRow contains information for user password reset
 type PasswordResetRow struct {
 	Token   uuid.UUID `json:"token"`
 	UserID  uuid.UUID `json:"user_id"`

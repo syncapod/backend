@@ -123,14 +123,20 @@ func (a *AuthController) CreateUser(ctx context.Context, email, username, pwd st
 	}
 	err = a.authStore.InsertUser(ctx, newUser)
 	if err != nil {
-		return nil, fmt.Errorf("AuthController.CreateUser() error inserting user into db: %v", err)
+		return nil, fmt.Errorf("AuthController.CreateUser() error inserting user into db: %w", err)
 	}
 
 	activationToken, err := uuid.NewRandom()
 	if err != nil {
-		return nil, fmt.Errorf("AuthController.CreateUser() error generating UUID: %v", err)
+		return nil, fmt.Errorf("AuthController.CreateUser() error generating UUID: %w", err)
 	}
-	// TODO: template email and add db insert for activation token
+	activationRow := &db.ActivationRow{Token: activationToken, UserID: newUser.ID, Expires: time.Now().Add(time.Hour * 24)}
+	err = a.authStore.InsertActivation(ctx, activationRow)
+	if err != nil {
+		// TODO: remove user from database???
+		return nil, fmt.Errorf("AuthController.CreateUser() error inserting activation code: %w", err)
+	}
+
 	a.mailer.Queue(newUser.Email, "Please Activate Your syncapod.com Account", "Token: "+activationToken.String()) // TODO: create html email template
 
 	return newUser, nil
@@ -147,6 +153,7 @@ func (a *AuthController) ResetPassword(ctx context.Context, email string) error 
 	}
 
 	// TODO: template email and add db insert for password reset
+
 	a.mailer.Queue(user.Email, "Reset Password", "Click this link to reset your syncapod.com password\nToken: "+activationToken.String())
 
 	return nil

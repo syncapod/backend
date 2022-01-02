@@ -20,6 +20,14 @@ func scanUserRow(row scanner, u *UserRow) error {
 	return row.Scan(&u.ID, &u.Email, &u.Username, &u.Birthdate, &u.PasswordHash, &u.Created, &u.LastSeen, &u.Activated)
 }
 
+func scanActivationRow(row scanner, p *ActivationRow) error {
+	return row.Scan(&p.Token, &p.UserID, &p.Expires)
+}
+
+func scanPasswordResetRow(row scanner, p *PasswordResetRow) error {
+	return row.Scan(&p.Token, &p.UserID, &p.Expires)
+}
+
 // User
 func (a *AuthStorePG) InsertUser(ctx context.Context, u *UserRow) error {
 	_, err := a.db.Exec(ctx,
@@ -145,4 +153,66 @@ func (a *AuthStorePG) GetSessionAndUser(ctx context.Context, sessionID uuid.UUID
 		return nil, nil, fmt.Errorf("GetSessionAndUser() error: %v", err)
 	}
 	return s, u, nil
+}
+
+// InsertPasswordReset inserts a password reset object
+func (a *AuthStorePG) InsertPasswordReset(ctx context.Context, p *PasswordResetRow) error {
+	_, err := a.db.Exec(ctx,
+		"INSERT INTO PasswordReset (token,user_id,expires) VALUES($1,$2,$3)",
+		p.Token, p.UserID, p.Expires)
+	if err != nil {
+		return fmt.Errorf("InsertPasswordReset() error: %w", err)
+	}
+	return nil
+}
+
+// FindPasswordReset finds a password reset row based on a given token
+func (a *AuthStorePG) FindPasswordReset(ctx context.Context, token uuid.UUID) (*PasswordResetRow, error) {
+	p := &PasswordResetRow{}
+	row := a.db.QueryRow(ctx, "SELECT * FROM PasswordReset WHERE token = $1", &token)
+	err := scanPasswordResetRow(row, p)
+	if err != nil {
+		return nil, fmt.Errorf("FindPasswordReset() error: %w", err)
+	}
+	return p, nil
+}
+
+// DeletePasswordReset
+func (a *AuthStorePG) DeletePasswordReset(ctx context.Context, token uuid.UUID) error {
+	_, err := a.db.Exec(ctx, "DELETE FROM PasswordReset WHERE token = $1", &token)
+	if err != nil {
+		return fmt.Errorf("DeletePasswordReset() error: %w", err)
+	}
+	return nil
+}
+
+// InsertActivation inserts an activation token in the Activation table
+func (a *AuthStorePG) InsertActivation(ctx context.Context, p *ActivationRow) error {
+	_, err := a.db.Exec(ctx,
+		"INSERT INTO Activation (token,user_id,expires) VALUES($1,$2,$3)",
+		p.Token, p.UserID, p.Expires)
+	if err != nil {
+		return fmt.Errorf("InsertActivationRow() error: %w", err)
+	}
+	return nil
+}
+
+// FindActivation finds a activation row based on a given token
+func (a *AuthStorePG) FindActivation(ctx context.Context, token uuid.UUID) (*ActivationRow, error) {
+	p := &ActivationRow{}
+	row := a.db.QueryRow(ctx, "SELECT * FROM Activation WHERE token = $1", &token)
+	err := scanActivationRow(row, p)
+	if err != nil {
+		return nil, fmt.Errorf("FindActivation() error: %w", err)
+	}
+	return p, nil
+}
+
+// DeleteActivation deletes activation row
+func (a *AuthStorePG) DeleteActivation(ctx context.Context, token uuid.UUID) error {
+	_, err := a.db.Exec(ctx, "DELETE FROM Activation WHERE token = $1", &token)
+	if err != nil {
+		return fmt.Errorf("DeleteActivation() error: %w", err)
+	}
+	return nil
 }

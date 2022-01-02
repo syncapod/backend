@@ -567,13 +567,13 @@ func setupAuthDB() {
 
 	// test users
 	getUser := &UserRow{ID: getUserID, Email: "get@test.test", Username: "get", Birthdate: time.Unix(10000, 0).UTC(), PasswordHash: []byte("pass"), Created: time.Unix(0, 0), LastSeen: time.Unix(0, 0)}
-	insertUser(a, getUser)
+	insertUser(getUser)
 	updateUser := &UserRow{ID: uuid.MustParse("b813c6e3-9cd0-4aed-9c4e-1d88ae20c777"), Email: "update@test.test", Username: "update", Birthdate: time.Unix(10001, 0).UTC(), PasswordHash: []byte("pass"), Created: time.Unix(0, 0), LastSeen: time.Unix(0, 0)}
-	insertUser(a, updateUser)
+	insertUser(updateUser)
 	updatePassUser := &UserRow{ID: uuid.MustParse("c813c6e3-9cd0-4aed-9c4e-1d88ae20c777"), Email: "updatePass@test.test", Username: "updatePass", Birthdate: time.Unix(10002, 0).UTC(), PasswordHash: []byte("pass"), Created: time.Unix(0, 0), LastSeen: time.Unix(0, 0)}
-	insertUser(a, updatePassUser)
+	insertUser(updatePassUser)
 	deleteUser := &UserRow{ID: uuid.MustParse("d813c6e3-9cd0-4aed-9c4e-1d88ae20c777"), Email: "delete@test.test", Username: "delete", Birthdate: time.Unix(10002, 0).UTC(), PasswordHash: []byte("pass"), Created: time.Unix(0, 0), LastSeen: time.Unix(0, 0)}
-	insertUser(a, deleteUser)
+	insertUser(deleteUser)
 
 	// test sessions
 	getSesh := &SessionRow{ID: uuid.MustParse("a813c6e3-9cd0-4aed-9c4e-1d87ae20c8ba"), UserID: getUserID,
@@ -601,7 +601,8 @@ func setupAuthDB() {
 	insertAccessToken(o, deleteToken)
 }
 
-func insertUser(a *AuthStorePG, u *UserRow) {
+func insertUser(u *UserRow) {
+	a := NewAuthStorePG(dbpg)
 	err := a.InsertUser(context.Background(), u)
 	if err != nil {
 		log.Println("db.auth_test.insertUser() id:", u.ID)
@@ -626,5 +627,264 @@ func insertAccessToken(o *OAuthStorePG, a *AccessTokenRow) {
 	err := o.InsertAccessToken(context.Background(), a)
 	if err != nil {
 		log.Fatalln("db.auth_test.insertAccessToken() error:", err)
+	}
+}
+
+func insertPasswordReset(p *PasswordResetRow) {
+	a := NewAuthStorePG(dbpg)
+	err := a.InsertPasswordReset(context.Background(), p)
+	if err != nil {
+		log.Fatalln("db.auth_test.insertPasswordReset() error:", err)
+	}
+}
+
+func insertActivation(p *ActivationRow) {
+	a := NewAuthStorePG(dbpg)
+	err := a.InsertActivation(context.Background(), p)
+	if err != nil {
+		log.Fatalln("db.auth_test.insertPasswordReset() error:", err)
+	}
+}
+
+func TestAuthStorePG_InsertPasswordReset(t *testing.T) {
+	testUser := &UserRow{ID: uuid.New(), Email: "insert@passwordreset.com", Username: "insertPasswordReset", Birthdate: time.Now(), PasswordHash: []byte("test"), Created: time.Now(), LastSeen: time.Now(), Activated: false}
+	insertUser(testUser)
+	type fields struct {
+		db *pgxpool.Pool
+	}
+	type args struct {
+		ctx context.Context
+		p   *PasswordResetRow
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		wantErr bool
+	}{
+		{
+			name:   "success",
+			fields: fields{db: dbpg},
+			args: args{
+				ctx: context.Background(),
+				p:   &PasswordResetRow{Token: uuid.New(), UserID: testUser.ID, Expires: time.Now()},
+			},
+			wantErr: false,
+		},
+		// TODO: do we need to add data validation
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a := &AuthStorePG{
+				db: tt.fields.db,
+			}
+			if err := a.InsertPasswordReset(tt.args.ctx, tt.args.p); (err != nil) != tt.wantErr {
+				t.Errorf("AuthStorePG.InsertPasswordReset() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestAuthStorePG_FindPasswordReset(t *testing.T) {
+	testUser := &UserRow{ID: uuid.New(), Email: "find@passwordreset.com", Username: "findPasswordReset", Birthdate: time.Now(), PasswordHash: []byte("test"), Created: time.Now(), LastSeen: time.Now(), Activated: false}
+	insertUser(testUser)
+	testRow := &PasswordResetRow{Token: uuid.New(), UserID: testUser.ID, Expires: time.Now()}
+	insertPasswordReset(testRow)
+
+	type fields struct {
+		db *pgxpool.Pool
+	}
+	type args struct {
+		ctx   context.Context
+		token uuid.UUID
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		want    *PasswordResetRow
+		wantErr bool
+	}{
+		{
+			name:    "success",
+			fields:  fields{db: dbpg},
+			args:    args{ctx: context.Background(), token: testRow.Token},
+			want:    testRow,
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a := &AuthStorePG{
+				db: tt.fields.db,
+			}
+			got, err := a.FindPasswordReset(tt.args.ctx, tt.args.token)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("AuthStorePG.FindPasswordReset() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got.Token, tt.want.Token) {
+				t.Errorf("AuthStorePG.FindPasswordReset() = %v, want %v", got.Token, tt.want.Token)
+			}
+		})
+	}
+}
+
+func TestAuthStorePG_DeletePasswordReset(t *testing.T) {
+	testUser := &UserRow{ID: uuid.New(), Email: "delete@passwordreset.com", Username: "deletePasswordReset", Birthdate: time.Now(), PasswordHash: []byte("test"), Created: time.Now(), LastSeen: time.Now(), Activated: false}
+	insertUser(testUser)
+	testRow := &PasswordResetRow{Token: uuid.New(), UserID: testUser.ID, Expires: time.Now()}
+	insertPasswordReset(testRow)
+
+	type fields struct {
+		db *pgxpool.Pool
+	}
+	type args struct {
+		ctx   context.Context
+		token uuid.UUID
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		wantErr bool
+	}{
+		{
+			name:    "success",
+			fields:  fields{db: dbpg},
+			args:    args{ctx: context.Background(), token: testRow.Token},
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a := &AuthStorePG{
+				db: tt.fields.db,
+			}
+			if err := a.DeletePasswordReset(tt.args.ctx, tt.args.token); (err != nil) != tt.wantErr {
+				t.Errorf("AuthStorePG.DeletePasswordReset() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestAuthStorePG_InsertActivation(t *testing.T) {
+	testUser := &UserRow{ID: uuid.New(), Email: "insert@activation.com", Username: "insertActivation", Birthdate: time.Now(), PasswordHash: []byte("test"), Created: time.Now(), LastSeen: time.Now(), Activated: false}
+	insertUser(testUser)
+	type fields struct {
+		db *pgxpool.Pool
+	}
+	type args struct {
+		ctx context.Context
+		p   *ActivationRow
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		wantErr bool
+	}{
+		{
+			name:   "success",
+			fields: fields{db: dbpg},
+			args: args{
+				ctx: context.Background(),
+				p:   &ActivationRow{Token: uuid.New(), UserID: testUser.ID, Expires: time.Now()},
+			},
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a := &AuthStorePG{
+				db: tt.fields.db,
+			}
+			if err := a.InsertActivation(tt.args.ctx, tt.args.p); (err != nil) != tt.wantErr {
+				t.Errorf("AuthStorePG.InsertActivation() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestAuthStorePG_FindActivation(t *testing.T) {
+	testUser := &UserRow{ID: uuid.New(), Email: "find@activation.com", Username: "findActivation", Birthdate: time.Now(), PasswordHash: []byte("test"), Created: time.Now(), LastSeen: time.Now(), Activated: false}
+	insertUser(testUser)
+	testRow := &ActivationRow{Token: uuid.New(), UserID: testUser.ID, Expires: time.Now()}
+	insertActivation(testRow)
+
+	type fields struct {
+		db *pgxpool.Pool
+	}
+	type args struct {
+		ctx   context.Context
+		token uuid.UUID
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		want    *ActivationRow
+		wantErr bool
+	}{
+		{
+			name:    "success",
+			fields:  fields{db: dbpg},
+			args:    args{ctx: context.Background(), token: testRow.Token},
+			want:    testRow,
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a := &AuthStorePG{
+				db: tt.fields.db,
+			}
+			got, err := a.FindActivation(tt.args.ctx, tt.args.token)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("AuthStorePG.FindActivation() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got.Token, tt.want.Token) {
+				t.Errorf("AuthStorePG.FindActivation() = %v, want %v", got.Token, tt.want.Token)
+			}
+		})
+	}
+}
+
+func TestAuthStorePG_DeleteActivation(t *testing.T) {
+	testUser := &UserRow{ID: uuid.New(), Email: "delete@activation.com", Username: "da", Birthdate: time.Now(), PasswordHash: []byte("test"), Created: time.Now(), LastSeen: time.Now(), Activated: false}
+	insertUser(testUser)
+	testRow := &ActivationRow{Token: uuid.New(), UserID: testUser.ID, Expires: time.Now()}
+	insertActivation(testRow)
+
+	type fields struct {
+		db *pgxpool.Pool
+	}
+	type args struct {
+		ctx   context.Context
+		token uuid.UUID
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		wantErr bool
+	}{
+		{
+			name:    "success",
+			fields:  fields{db: dbpg},
+			args:    args{ctx: context.Background(), token: testRow.Token},
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a := &AuthStorePG{
+				db: tt.fields.db,
+			}
+			if err := a.DeleteActivation(tt.args.ctx, tt.args.token); (err != nil) != tt.wantErr {
+				t.Errorf("AuthStorePG.DeleteActivation() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
 	}
 }
