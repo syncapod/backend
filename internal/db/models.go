@@ -23,6 +23,7 @@ type AuthStore interface {
 	// User Activation
 	InsertActivation(ctx context.Context, p *ActivationRow) error
 	FindActivation(ctx context.Context, token uuid.UUID) (*ActivationRow, error)
+	UpdateUserActivated(ctx context.Context, userID uuid.UUID) error
 	DeleteActivation(ctx context.Context, token uuid.UUID) error
 
 	// Session

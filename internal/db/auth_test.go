@@ -888,3 +888,53 @@ func TestAuthStorePG_DeleteActivation(t *testing.T) {
 		})
 	}
 }
+
+func TestAuthStorePG_UpdateUserActivated(t *testing.T) {
+	testUser := &UserRow{ID: uuid.New(), Email: "activate@user.com", Username: "userActivated", Birthdate: time.Now(), PasswordHash: []byte("test"), Created: time.Now(), LastSeen: time.Now(), Activated: false}
+	insertUser(testUser)
+	type fields struct {
+		db *pgxpool.Pool
+	}
+	type args struct {
+		ctx    context.Context
+		userID uuid.UUID
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		wantErr bool
+	}{
+		{
+			name:    "success",
+			fields:  fields{db: dbpg},
+			args:    args{ctx: context.Background(), userID: testUser.ID},
+			wantErr: false,
+		},
+		{
+			name:    "failure",
+			fields:  fields{db: dbpg},
+			args:    args{ctx: context.Background(), userID: uuid.New()},
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a := &AuthStorePG{
+				db: tt.fields.db,
+			}
+			if err := a.UpdateUserActivated(tt.args.ctx, tt.args.userID); (err != nil) != tt.wantErr {
+				t.Errorf("AuthStorePG.UpdateUserActivated() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if !tt.wantErr {
+				user, err := a.FindUserByEmail(tt.args.ctx, testUser.Email)
+				if err != nil {
+					t.Fatalf("AuthStorePG.UpdateUserActivated() error trying to find user: %v", err)
+				}
+				if !user.Activated {
+					t.Fatal("AuthStorePG.UpdateUserActivated() user not activated")
+				}
+			}
+		})
+	}
+}

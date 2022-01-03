@@ -216,3 +216,15 @@ func (a *AuthStorePG) DeleteActivation(ctx context.Context, token uuid.UUID) err
 	}
 	return nil
 }
+
+// UpdateUserActivated updates the activated field to true of user
+func (a *AuthStorePG) UpdateUserActivated(ctx context.Context, userID uuid.UUID) error {
+	result, err := a.db.Exec(ctx, "UPDATE Users SET activated = $1 WHERE id = $2", true, userID)
+	if err != nil {
+		return fmt.Errorf("UpdateUserActivated() error: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		return fmt.Errorf("UpdateUserActivated() error: no rows updated")
+	}
+	return nil
+}

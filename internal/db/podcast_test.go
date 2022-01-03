@@ -213,7 +213,6 @@ func Test_FindEpisodesByRange(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Test_FindEpisodesByRange() error finding episodes: %v", err)
 	}
-	log.Println("pods:", epis)
 	require.Equal(t, []Episode{*testEpi2, *testEpi}, epis)
 }
 

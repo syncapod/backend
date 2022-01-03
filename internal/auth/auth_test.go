@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/sschwartz96/syncapod-backend/internal"
 	"github.com/sschwartz96/syncapod-backend/internal/db"
+	"github.com/sschwartz96/syncapod-backend/internal/mail"
 )
 
 var (
@@ -20,6 +21,10 @@ var (
 	oauthStore  db.OAuthStore
 	getTestUser = &db.UserRow{ID: uuid.MustParse("a813c6e3-9cd0-4aed-9c4e-1d88ae20c8ba"), Email: "get@test.auth", Username: "getTestAuth", Birthdate: time.Unix(0, 0).UTC()}
 )
+
+type mailMocker struct{}
+
+func (m *mailMocker) Queue(to, subject, body string) {}
 
 // user TestMain to setup
 func TestMain(m *testing.M) {
@@ -30,12 +35,12 @@ func TestMain(m *testing.M) {
 		log.Fatalf("auth.TestMain() error setting up docker db: %v", err)
 	}
 
-	// setup db
-	setupAuthDB()
-
 	// setup store
 	authStore = db.NewAuthStorePG(dbpg)
 	oauthStore = db.NewOAuthStorePG(dbpg)
+
+	// setup test db
+	setupAuthDB()
 
 	// run tests
 	runCode := m.Run()
@@ -248,15 +253,15 @@ func setupAuthDB() {
 	a := db.NewAuthStorePG(dbpg)
 	// test users
 	getTestUser.PasswordHash = []byte("$2a$10$rUH2xp2xIt3ASkdpvH7duugL//F.HsqP58DKvcAAnTmXRWM0fSiRS")
-	insertUser(a, getTestUser)
+	insertUser(getTestUser)
 	getTestUser.PasswordHash = nil
 
 	updateUser := &db.UserRow{ID: uuid.MustParse("b813c6e3-9cd0-4aed-9c4e-1d88ae20c8ba"), Email: "update@test.auth", Username: "updateAuth", Birthdate: time.Unix(10001, 0).UTC(), PasswordHash: []byte("pass")}
-	insertUser(a, updateUser)
+	insertUser(updateUser)
 	updatePassUser := &db.UserRow{ID: uuid.MustParse("c813c6e3-9cd0-4aed-9c4e-1d88ae20c8ba"), Email: "updatePass@test.auth", Username: "updatePassAuth", Birthdate: time.Unix(10002, 0).UTC(), PasswordHash: []byte("pass")}
-	insertUser(a, updatePassUser)
+	insertUser(updatePassUser)
 	deleteUser := &db.UserRow{ID: uuid.MustParse("d813c6e3-9cd0-4aed-9c4e-1d88ae20c8ba"), Email: "delete@test.auth", Username: "deleteAuth", Birthdate: time.Unix(10002, 0).UTC(), PasswordHash: []byte("pass")}
-	insertUser(a, deleteUser)
+	insertUser(deleteUser)
 
 	// test sessions
 	getSesh := &db.SessionRow{ID: uuid.MustParse("a813c6e3-9cd0-4aed-9c4e-1d87ae20c111"), UserID: uuid.MustParse("a813c6e3-9cd0-4aed-9c4e-1d88ae20c8ba"),
@@ -292,8 +297,8 @@ func setupAuthDB() {
 	insertAccessToken(o, deleteToken)
 }
 
-func insertUser(a *db.AuthStorePG, u *db.UserRow) {
-	err := a.InsertUser(context.Background(), u)
+func insertUser(u *db.UserRow) {
+	err := authStore.InsertUser(context.Background(), u)
 	if err != nil {
 		log.Println("db.auth_test.insertUser() id:", u.ID)
 		log.Println("db.auth_test.insertUser() id:", u.Email)
@@ -318,5 +323,73 @@ func insertAccessToken(o *db.OAuthStorePG, a *db.AccessTokenRow) {
 	err := o.InsertAccessToken(context.Background(), a)
 	if err != nil {
 		log.Fatalln("db.auth_test.insertAccessToken() error:", err)
+	}
+}
+
+func TestAuthController_ActivateUser(t *testing.T) {
+	testUser := &db.UserRow{ID: uuid.New(), Email: "activate@user.com", Username: "activateUser", Birthdate: time.Now(), PasswordHash: []byte("password"), Created: time.Now(), LastSeen: time.Now(), Activated: false}
+	insertUser(testUser)
+	testActivation := &db.ActivationRow{Token: uuid.New(), UserID: testUser.ID, Expires: time.Now().Add(time.Minute)}
+	testActivationExpired := &db.ActivationRow{Token: uuid.New(), UserID: testUser.ID, Expires: time.Now().Add(-1 * time.Minute)}
+	authStore.InsertActivation(context.Background(), testActivation)
+	authStore.InsertActivation(context.Background(), testActivationExpired)
+
+	type fields struct {
+		authStore  db.AuthStore
+		oauthStore db.OAuthStore
+		mailer     mail.MailQueuer
+	}
+	type args struct {
+		ctx   context.Context
+		token uuid.UUID
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		want    *db.ActivationRow
+		wantErr bool
+	}{
+		{
+			name:    "success",
+			fields:  fields{authStore: authStore, oauthStore: oauthStore, mailer: &mailMocker{}},
+			args:    args{ctx: context.Background(), token: testActivation.Token},
+			want:    testActivation,
+			wantErr: false,
+		},
+		{
+			name:    "expired",
+			fields:  fields{authStore: authStore, oauthStore: oauthStore, mailer: &mailMocker{}},
+			args:    args{ctx: context.Background(), token: testActivationExpired.Token},
+			want:    nil,
+			wantErr: true,
+		},
+		{
+			name:    "does not exist",
+			fields:  fields{authStore: authStore, oauthStore: oauthStore, mailer: &mailMocker{}},
+			args:    args{ctx: context.Background(), token: uuid.New()},
+			want:    nil,
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a := &AuthController{
+				authStore:  tt.fields.authStore,
+				oauthStore: tt.fields.oauthStore,
+				mailer:     tt.fields.mailer,
+			}
+			got, err := a.ActivateUser(tt.args.ctx, tt.args.token)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("AuthController.ActivateUser() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if tt.wantErr {
+				return
+			}
+			if tt.want != nil && !reflect.DeepEqual(got.Token, tt.want.Token) || !reflect.DeepEqual(got.UserID, tt.want.UserID) {
+				t.Errorf("AuthController.ActivateUser() = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }

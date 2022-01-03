@@ -19,7 +19,9 @@ type Auth interface {
 	Authorize(ctx context.Context, sessionID uuid.UUID) (*db.UserRow, error)
 	Logout(ctx context.Context, sessionID uuid.UUID) error
 	CreateUser(ctx context.Context, email, username, pwd string, dob time.Time) (*db.UserRow, error)
+	ActivateUser(ctx context.Context, token uuid.UUID) (*db.ActivationRow, error)
 	ResetPassword(ctx context.Context, emailOrUsername string) error
+	ValidatePasswordResetToken(ctx context.Context, token uuid.UUID) (*db.PasswordResetRow, error)
 
 	// OAuth
 	CreateAuthCode(ctx context.Context, userID uuid.UUID, clientID string) (*db.AuthCodeRow, error)
@@ -32,7 +34,7 @@ type Auth interface {
 type AuthController struct {
 	authStore  db.AuthStore
 	oauthStore db.OAuthStore
-	mailer     *mail.Mailer
+	mailer     mail.MailQueuer
 }
 
 func NewAuthController(aStore db.AuthStore, oStore db.OAuthStore, mailer *mail.Mailer) *AuthController {
@@ -142,21 +144,55 @@ func (a *AuthController) CreateUser(ctx context.Context, email, username, pwd st
 	return newUser, nil
 }
 
+// ActivateUser finds the activation token, if valid, updates the user's activated field
+func (a *AuthController) ActivateUser(ctx context.Context, token uuid.UUID) (*db.ActivationRow, error) {
+	activationRow, err := a.authStore.FindActivation(ctx, token)
+	if err != nil {
+		return nil, fmt.Errorf("AuthController.ActivateUser() error finding activation row: %w", err)
+	}
+
+	// check if expired
+	if time.Now().After(activationRow.Expires) {
+		return nil, fmt.Errorf("AuthController.ActivateUser() error: activation token expired")
+	}
+
+	err = a.authStore.UpdateUserActivated(ctx, activationRow.UserID)
+	if err != nil {
+		return nil, fmt.Errorf("AuthController.ActivateUser() error activating user: %w", err)
+	}
+
+	err = a.authStore.DeleteActivation(ctx, activationRow.Token)
+	if err != nil {
+		return nil, fmt.Errorf("AuthController.ActivateUser() error deleting activation row: %w", err)
+	}
+	return activationRow, nil
+}
+
 func (a *AuthController) ResetPassword(ctx context.Context, email string) error {
 	user, err := a.authStore.FindUserByEmail(ctx, email)
 	if err != nil {
 		return fmt.Errorf("AuthController.ResetPassword() error finding user by email: %w", err)
 	}
-	activationToken, err := uuid.NewRandom()
+	passwordResetToken, err := uuid.NewRandom()
 	if err != nil {
-		return fmt.Errorf("AuthController.ResetPassword() error finding user by email: %w", err)
+		return fmt.Errorf("AuthController.ResetPassword() error generating token: %w", err)
 	}
 
-	// TODO: template email and add db insert for password reset
+	passwordResetRow := &db.PasswordResetRow{Token: passwordResetToken, UserID: user.ID, Expires: time.Now().Add(time.Hour * 2)}
+	err = a.authStore.InsertPasswordReset(ctx, passwordResetRow)
+	if err != nil {
+		return fmt.Errorf("AuthController.ResetPassword() error inserting password reset row: %w", err)
+	}
 
-	a.mailer.Queue(user.Email, "Reset Password", "Click this link to reset your syncapod.com password\nToken: "+activationToken.String())
+	// TODO: template email
+	a.mailer.Queue(user.Email, "Reset Password", "Click this link to reset your syncapod.com password\nToken: "+passwordResetToken.String())
 
 	return nil
+}
+
+// ValidatePasswordResetToken just proxies to the authStore.FindPasswordReset
+func (a *AuthController) ValidatePasswordResetToken(ctx context.Context, token uuid.UUID) (*db.PasswordResetRow, error) {
+	return a.authStore.FindPasswordReset(ctx, token)
 }
 
 // findUserByEmailOrUsername is a helper method for login

@@ -10,6 +10,12 @@ import (
 	"go.uber.org/zap"
 )
 
+// MailQueuer is strictly used to be able to testing other modules, stubbing the Mailer functionality
+type MailQueuer interface {
+	Queue(to, subject, body string)
+}
+
+// Mailer implements MailQueuer
 type Mailer struct {
 	logger       *zap.Logger
 	smtpAddress  string
@@ -55,7 +61,7 @@ func NewMailer(cfg *config.Config, logger *zap.Logger) (*Mailer, error) {
 	return mailer, nil
 }
 
-// Queue takes message and to email address and queues the email for sending
+// Queue takes "to" email, subject, body of message and queues it up to send
 func (m *Mailer) Queue(to, subject, body string) {
 	m.queueChan <- mail{to: to, subject: subject, body: body}
 }
@@ -67,7 +73,7 @@ func (m *Mailer) Start() error {
 	from := m.smtpUser
 	for {
 		newMsg := <-m.queueChan
-		m.logger.Info("new message received", zap.String("to", newMsg.to))
+		m.logger.Info("new message received", zap.String("to", newMsg.to), zap.String("subject", newMsg.subject))
 		if client == nil {
 			m.logger.Info("smtp client closed, creating new connection")
 			for {
