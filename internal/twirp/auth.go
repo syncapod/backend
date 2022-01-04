@@ -3,7 +3,6 @@ package twirp
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -31,32 +30,20 @@ func (a *AuthService) CreateAccount(ctx context.Context, req *protos.CreateAccou
 		}, nil
 	}
 
-	// ensure user is older than 18
-	if (time.Now().Unix() - req.DateOfBirth) < 567648000 {
-		return &protos.CreateAccountRes{Error: "user must be at least 18 years old"}, nil
-	}
-
-	// password > 15 characters
-	if len(req.Password) < 15 {
-		return &protos.CreateAccountRes{Error: "password has to be at least than 15 characters"}, nil
-	}
-
 	// create account
 	dob := time.Unix(req.DateOfBirth, 0)
 	_, err := a.ac.CreateUser(ctx, req.Email, req.Username, req.Password, dob)
 	if err != nil {
-		if strings.Contains(err.Error(), "email") {
+		if err.Error() == "email taken" {
 			return &protos.CreateAccountRes{Error: "email in use"}, nil
 		}
-		if strings.Contains(err.Error(), "username") {
+		if err.Error() == "username taken" {
 			return &protos.CreateAccountRes{Error: "username in use"}, nil
 		}
 		return &protos.CreateAccountRes{
 			Error: fmt.Sprintf("unknown error: %v", err.Error()),
 		}, nil
 	}
-
-	// TODO: send activation email
 
 	return &protos.CreateAccountRes{Error: ""}, nil
 }

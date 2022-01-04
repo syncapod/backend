@@ -188,18 +188,6 @@ func TestAuthController_Logout(t *testing.T) {
 	}
 }
 
-func TestAuthController_CreateUser(t *testing.T) {
-	// TODO: add more test cases as well as stub out mailer so we can mock it
-	// a := &AuthController{
-	// 	authStore:  authStore,
-	// 	oauthStore: oauthStore,
-	// }
-	// email, username, pwd := "testCreateUser@syncapod.com", "testCreateUser", "secret"
-	// u, err := a.CreateUser(context.Background(), email, username, pwd, time.Now())
-	// require.Nil(t, err)
-	// require.NotNil(t, u)
-}
-
 func TestAuthController_findUserByEmailOrUsername(t *testing.T) {
 	type fields struct {
 		authStore  db.AuthStore
@@ -389,6 +377,124 @@ func TestAuthController_ActivateUser(t *testing.T) {
 			}
 			if tt.want != nil && !reflect.DeepEqual(got.Token, tt.want.Token) || !reflect.DeepEqual(got.UserID, tt.want.UserID) {
 				t.Errorf("AuthController.ActivateUser() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestAuthController_CreateUser(t *testing.T) {
+	testUser := &db.UserRow{ID: uuid.New(), Email: "email@taken.com", Username: "usernameTaken", Birthdate: time.Now(), PasswordHash: []byte("password"), Created: time.Now(), LastSeen: time.Now(), Activated: true}
+	insertUser(testUser)
+	mailStub := &mailMocker{}
+	type fields struct {
+		authStore  db.AuthStore
+		oauthStore db.OAuthStore
+		mailer     mail.MailQueuer
+	}
+	type args struct {
+		ctx      context.Context
+		email    string
+		username string
+		pwd      string
+		dob      time.Time
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		wantErr bool
+	}{
+		{
+			name:   "valid",
+			fields: fields{authStore: authStore, oauthStore: oauthStore, mailer: mailStub},
+			args: args{
+				ctx:      context.Background(),
+				email:    "valid@email.com",
+				username: "validUsername",
+				pwd:      "passwordIsLongEnough",
+				dob:      time.Now().Add(time.Hour * -158000),
+			},
+			wantErr: false,
+		},
+		{
+			name:   "inavlid email format",
+			fields: fields{authStore: authStore, oauthStore: oauthStore, mailer: mailStub},
+			args: args{
+				ctx:      context.Background(),
+				email:    "invalid.email",
+				username: "newUser123",
+				pwd:      "passwordIsLongEnough",
+				dob:      time.Now().Add(time.Hour * -158000),
+			},
+			wantErr: true,
+		},
+		{
+			name:   "invalid email, taken",
+			fields: fields{authStore: authStore, oauthStore: oauthStore, mailer: mailStub},
+			args: args{
+				ctx:      context.Background(),
+				email:    testUser.Email,
+				username: "newUser123",
+				pwd:      "passwordIsLongEnough",
+				dob:      time.Now().Add(time.Hour * -158000),
+			},
+			wantErr: true,
+		},
+		{
+			name:   "invalid username taken",
+			fields: fields{authStore: authStore, oauthStore: oauthStore, mailer: mailStub},
+			args: args{
+				ctx:      context.Background(),
+				email:    "username@taken.com",
+				username: testUser.Username,
+				pwd:      "passwordIsLongEnough",
+				dob:      time.Now().Add(time.Hour * -158000),
+			},
+			wantErr: true,
+		},
+		{
+			name:   "invalid password",
+			fields: fields{authStore: authStore, oauthStore: oauthStore, mailer: mailStub},
+			args: args{
+				ctx:      context.Background(),
+				email:    "inavalid@password.com",
+				username: "invalidPass",
+				pwd:      "password",
+				dob:      time.Now().Add(time.Hour * -158000),
+			},
+			wantErr: true,
+		},
+		{
+			name:   "under age",
+			fields: fields{authStore: authStore, oauthStore: oauthStore, mailer: mailStub},
+			args: args{
+				ctx:      context.Background(),
+				email:    "invalid@age.com",
+				username: "invalidAge",
+				pwd:      "passwordIsLongEnough",
+				dob:      time.Now().Add(time.Hour * -15800),
+			},
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a := &AuthController{
+				authStore:  tt.fields.authStore,
+				oauthStore: tt.fields.oauthStore,
+				mailer:     tt.fields.mailer,
+			}
+			got, err := a.CreateUser(tt.args.ctx, tt.args.email, tt.args.username, tt.args.pwd, tt.args.dob)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("AuthController.CreateUser() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if tt.wantErr {
+				return
+			}
+			if got.Email != tt.args.email || got.Username != tt.args.username {
+				t.Errorf("AuthController.CreateUser() username or email does not match what was returned")
+				return
 			}
 		})
 	}

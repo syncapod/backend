@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	netmail "net/mail"
 	"strings"
 	"time"
 
@@ -103,6 +104,22 @@ func (a *AuthController) Logout(ctx context.Context, sessionID uuid.UUID) error 
 }
 
 func (a *AuthController) CreateUser(ctx context.Context, email, username, pwd string, dob time.Time) (*db.UserRow, error) {
+	// ensure user is older than 18
+	if (time.Now().Unix() - dob.Unix()) < 567648000 {
+		return nil, fmt.Errorf("user must be at least 18 years old")
+	}
+
+	// ensure password >= 15 characters
+	if len(pwd) < 15 {
+		return nil, fmt.Errorf("password has to be at least than 15 characters")
+	}
+
+	// validate email address proper email
+	address, err := netmail.ParseAddress(email)
+	if err != nil || len(address.Name) > 0 {
+		return nil, fmt.Errorf("invalid email")
+	}
+
 	pwdHash, err := hash(pwd)
 	if err != nil {
 		return nil, fmt.Errorf("AuthController.CreateUser() error hashing password: %v", err)
@@ -125,6 +142,12 @@ func (a *AuthController) CreateUser(ctx context.Context, email, username, pwd st
 	}
 	err = a.authStore.InsertUser(ctx, newUser)
 	if err != nil {
+		if err.Error() == "duplicate key value violates unique constraint \"users_email_key\"" {
+			return nil, fmt.Errorf("email taken")
+		}
+		if err.Error() == "duplicate key value violates unique constraint \"users_username_key\"" {
+			return nil, fmt.Errorf("username taken")
+		}
 		return nil, fmt.Errorf("AuthController.CreateUser() error inserting user into db: %w", err)
 	}
 
@@ -136,6 +159,7 @@ func (a *AuthController) CreateUser(ctx context.Context, email, username, pwd st
 	err = a.authStore.InsertActivation(ctx, activationRow)
 	if err != nil {
 		// TODO: remove user from database???
+		// this is a very unexpected edge case
 		return nil, fmt.Errorf("AuthController.CreateUser() error inserting activation code: %w", err)
 	}
 
