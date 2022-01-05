@@ -2,7 +2,6 @@ package twirp
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -25,9 +24,7 @@ func NewAuthService(a *auth.AuthController) *AuthService {
 func (a *AuthService) CreateAccount(ctx context.Context, req *protos.CreateAccountReq) (*protos.CreateAccountRes, error) {
 	// accept terms
 	if !req.AcceptTerms {
-		return &protos.CreateAccountRes{
-			Error: "terms of use must be accepted",
-		}, nil
+		return nil, twirp.InvalidArgumentError("acceptTerms", "user must accept terms")
 	}
 
 	// create account
@@ -35,17 +32,15 @@ func (a *AuthService) CreateAccount(ctx context.Context, req *protos.CreateAccou
 	_, err := a.ac.CreateUser(ctx, req.Email, req.Username, req.Password, dob)
 	if err != nil {
 		if err.Error() == "email taken" {
-			return &protos.CreateAccountRes{Error: "email in use"}, nil
+			return nil, twirp.InvalidArgumentError("email", "email in use")
 		}
 		if err.Error() == "username taken" {
-			return &protos.CreateAccountRes{Error: "username in use"}, nil
+			return nil, twirp.InvalidArgumentError("email", "username in use")
 		}
-		return &protos.CreateAccountRes{
-			Error: fmt.Sprintf("unknown error: %v", err.Error()),
-		}, nil
+		return nil, twirp.Internal.Errorf("db error: %w", err)
 	}
 
-	return &protos.CreateAccountRes{Error: ""}, nil
+	return &protos.CreateAccountRes{}, nil
 }
 
 // ResetPassword method is called when user forgets password
@@ -97,4 +92,17 @@ func (a *AuthService) Logout(ctx context.Context, req *protos.LogoutReq) (*proto
 	return &protos.LogoutRes{
 		Success: true,
 	}, nil
+}
+
+// Activate activates account based on the activation token given
+func (a *AuthService) Activate(ctx context.Context, req *protos.ActivateReq) (*protos.ActivateRes, error) {
+	uuidToken, err := uuid.Parse(req.Token)
+	if err != nil {
+		return nil, twirp.InvalidArgumentError("token", "error parsing token")
+	}
+	_, err = a.ac.ActivateUser(ctx, uuidToken)
+	if err != nil {
+		return nil, twirp.Internal.Errorf("Error activating account: %w", err)
+	}
+	return &protos.ActivateRes{}, nil
 }

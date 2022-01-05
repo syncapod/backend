@@ -23,7 +23,7 @@ const (
 )
 
 var (
-	excludedMethods = []string{"Authenticate", "Authorize", "CreateAccount", "ResetPassword"}
+	excludedMethods = []string{"Activate", "Authenticate", "Authorize", "CreateAccount", "ResetPassword"}
 )
 
 // Server is truly needed for its Intercept method which authenticates users before accessing services, but also useful to have all the grpc server boilerplate contained within NewServer function

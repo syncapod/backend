@@ -38,7 +38,7 @@ type AuthController struct {
 	mailer     mail.MailQueuer
 }
 
-func NewAuthController(aStore db.AuthStore, oStore db.OAuthStore, mailer *mail.Mailer) *AuthController {
+func NewAuthController(aStore db.AuthStore, oStore db.OAuthStore, mailer mail.MailQueuer) *AuthController {
 	return &AuthController{authStore: aStore, oauthStore: oStore, mailer: mailer}
 }
 
@@ -142,11 +142,13 @@ func (a *AuthController) CreateUser(ctx context.Context, email, username, pwd st
 	}
 	err = a.authStore.InsertUser(ctx, newUser)
 	if err != nil {
-		if err.Error() == "duplicate key value violates unique constraint \"users_email_key\"" {
-			return nil, fmt.Errorf("email taken")
-		}
-		if err.Error() == "duplicate key value violates unique constraint \"users_username_key\"" {
-			return nil, fmt.Errorf("username taken")
+		if strings.Contains(err.Error(), "duplicate key value violates unique constraint") {
+			if strings.Contains(err.Error(), "users_email_key") {
+				return nil, fmt.Errorf("email taken")
+			}
+			if strings.Contains(err.Error(), "users_username_key") {
+				return nil, fmt.Errorf("username taken")
+			}
 		}
 		return nil, fmt.Errorf("AuthController.CreateUser() error inserting user into db: %w", err)
 	}

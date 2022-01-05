@@ -46,6 +46,7 @@ func StartDockerDB(name string) (*pgxpool.Pool, func() error, error) {
 		if err != nil {
 			return err
 		}
+		log.Println("postgres docker instance exposed on port:", resource.GetPort("5432/tcp"))
 		defer conn.Release()
 		return conn.Conn().Ping(context.Background())
 	})

@@ -29,6 +29,8 @@ const _ = twirp.TwirpPackageMinVersion_8_1_0
 type Auth interface {
 	CreateAccount(context.Context, *CreateAccountReq) (*CreateAccountRes, error)
 
+	Activate(context.Context, *ActivateReq) (*ActivateRes, error)
+
 	ResetPassword(context.Context, *ResetPasswordReq) (*ResetPasswordRes, error)
 
 	Authenticate(context.Context, *AuthenticateReq) (*AuthenticateRes, error)
@@ -44,7 +46,7 @@ type Auth interface {
 
 type authProtobufClient struct {
 	client      HTTPClient
-	urls        [5]string
+	urls        [6]string
 	interceptor twirp.Interceptor
 	opts        twirp.ClientOptions
 }
@@ -72,8 +74,9 @@ func NewAuthProtobufClient(baseURL string, client HTTPClient, opts ...twirp.Clie
 	// Build method URLs: <baseURL>[<prefix>]/<package>.<Service>/<Method>
 	serviceURL := sanitizeBaseURL(baseURL)
 	serviceURL += baseServicePath(pathPrefix, "protos", "Auth")
-	urls := [5]string{
+	urls := [6]string{
 		serviceURL + "CreateAccount",
+		serviceURL + "Activate",
 		serviceURL + "ResetPassword",
 		serviceURL + "Authenticate",
 		serviceURL + "Authorize",
@@ -134,6 +137,52 @@ func (c *authProtobufClient) callCreateAccount(ctx context.Context, in *CreateAc
 	return out, nil
 }
 
+func (c *authProtobufClient) Activate(ctx context.Context, in *ActivateReq) (*ActivateRes, error) {
+	ctx = ctxsetters.WithPackageName(ctx, "protos")
+	ctx = ctxsetters.WithServiceName(ctx, "Auth")
+	ctx = ctxsetters.WithMethodName(ctx, "Activate")
+	caller := c.callActivate
+	if c.interceptor != nil {
+		caller = func(ctx context.Context, req *ActivateReq) (*ActivateRes, error) {
+			resp, err := c.interceptor(
+				func(ctx context.Context, req interface{}) (interface{}, error) {
+					typedReq, ok := req.(*ActivateReq)
+					if !ok {
+						return nil, twirp.InternalError("failed type assertion req.(*ActivateReq) when calling interceptor")
+					}
+					return c.callActivate(ctx, typedReq)
+				},
+			)(ctx, req)
+			if resp != nil {
+				typedResp, ok := resp.(*ActivateRes)
+				if !ok {
+					return nil, twirp.InternalError("failed type assertion resp.(*ActivateRes) when calling interceptor")
+				}
+				return typedResp, err
+			}
+			return nil, err
+		}
+	}
+	return caller(ctx, in)
+}
+
+func (c *authProtobufClient) callActivate(ctx context.Context, in *ActivateReq) (*ActivateRes, error) {
+	out := new(ActivateRes)
+	ctx, err := doProtobufRequest(ctx, c.client, c.opts.Hooks, c.urls[1], in, out)
+	if err != nil {
+		twerr, ok := err.(twirp.Error)
+		if !ok {
+			twerr = twirp.InternalErrorWith(err)
+		}
+		callClientError(ctx, c.opts.Hooks, twerr)
+		return nil, err
+	}
+
+	callClientResponseReceived(ctx, c.opts.Hooks)
+
+	return out, nil
+}
+
 func (c *authProtobufClient) ResetPassword(ctx context.Context, in *ResetPasswordReq) (*ResetPasswordRes, error) {
 	ctx = ctxsetters.WithPackageName(ctx, "protos")
 	ctx = ctxsetters.WithServiceName(ctx, "Auth")
@@ -165,7 +214,7 @@ func (c *authProtobufClient) ResetPassword(ctx context.Context, in *ResetPasswor
 
 func (c *authProtobufClient) callResetPassword(ctx context.Context, in *ResetPasswordReq) (*ResetPasswordRes, error) {
 	out := new(ResetPasswordRes)
-	ctx, err := doProtobufRequest(ctx, c.client, c.opts.Hooks, c.urls[1], in, out)
+	ctx, err := doProtobufRequest(ctx, c.client, c.opts.Hooks, c.urls[2], in, out)
 	if err != nil {
 		twerr, ok := err.(twirp.Error)
 		if !ok {
@@ -211,7 +260,7 @@ func (c *authProtobufClient) Authenticate(ctx context.Context, in *AuthenticateR
 
 func (c *authProtobufClient) callAuthenticate(ctx context.Context, in *AuthenticateReq) (*AuthenticateRes, error) {
 	out := new(AuthenticateRes)
-	ctx, err := doProtobufRequest(ctx, c.client, c.opts.Hooks, c.urls[2], in, out)
+	ctx, err := doProtobufRequest(ctx, c.client, c.opts.Hooks, c.urls[3], in, out)
 	if err != nil {
 		twerr, ok := err.(twirp.Error)
 		if !ok {
@@ -257,7 +306,7 @@ func (c *authProtobufClient) Authorize(ctx context.Context, in *AuthorizeReq) (*
 
 func (c *authProtobufClient) callAuthorize(ctx context.Context, in *AuthorizeReq) (*AuthorizeRes, error) {
 	out := new(AuthorizeRes)
-	ctx, err := doProtobufRequest(ctx, c.client, c.opts.Hooks, c.urls[3], in, out)
+	ctx, err := doProtobufRequest(ctx, c.client, c.opts.Hooks, c.urls[4], in, out)
 	if err != nil {
 		twerr, ok := err.(twirp.Error)
 		if !ok {
@@ -303,7 +352,7 @@ func (c *authProtobufClient) Logout(ctx context.Context, in *LogoutReq) (*Logout
 
 func (c *authProtobufClient) callLogout(ctx context.Context, in *LogoutReq) (*LogoutRes, error) {
 	out := new(LogoutRes)
-	ctx, err := doProtobufRequest(ctx, c.client, c.opts.Hooks, c.urls[4], in, out)
+	ctx, err := doProtobufRequest(ctx, c.client, c.opts.Hooks, c.urls[5], in, out)
 	if err != nil {
 		twerr, ok := err.(twirp.Error)
 		if !ok {
@@ -324,7 +373,7 @@ func (c *authProtobufClient) callLogout(ctx context.Context, in *LogoutReq) (*Lo
 
 type authJSONClient struct {
 	client      HTTPClient
-	urls        [5]string
+	urls        [6]string
 	interceptor twirp.Interceptor
 	opts        twirp.ClientOptions
 }
@@ -352,8 +401,9 @@ func NewAuthJSONClient(baseURL string, client HTTPClient, opts ...twirp.ClientOp
 	// Build method URLs: <baseURL>[<prefix>]/<package>.<Service>/<Method>
 	serviceURL := sanitizeBaseURL(baseURL)
 	serviceURL += baseServicePath(pathPrefix, "protos", "Auth")
-	urls := [5]string{
+	urls := [6]string{
 		serviceURL + "CreateAccount",
+		serviceURL + "Activate",
 		serviceURL + "ResetPassword",
 		serviceURL + "Authenticate",
 		serviceURL + "Authorize",
@@ -414,6 +464,52 @@ func (c *authJSONClient) callCreateAccount(ctx context.Context, in *CreateAccoun
 	return out, nil
 }
 
+func (c *authJSONClient) Activate(ctx context.Context, in *ActivateReq) (*ActivateRes, error) {
+	ctx = ctxsetters.WithPackageName(ctx, "protos")
+	ctx = ctxsetters.WithServiceName(ctx, "Auth")
+	ctx = ctxsetters.WithMethodName(ctx, "Activate")
+	caller := c.callActivate
+	if c.interceptor != nil {
+		caller = func(ctx context.Context, req *ActivateReq) (*ActivateRes, error) {
+			resp, err := c.interceptor(
+				func(ctx context.Context, req interface{}) (interface{}, error) {
+					typedReq, ok := req.(*ActivateReq)
+					if !ok {
+						return nil, twirp.InternalError("failed type assertion req.(*ActivateReq) when calling interceptor")
+					}
+					return c.callActivate(ctx, typedReq)
+				},
+			)(ctx, req)
+			if resp != nil {
+				typedResp, ok := resp.(*ActivateRes)
+				if !ok {
+					return nil, twirp.InternalError("failed type assertion resp.(*ActivateRes) when calling interceptor")
+				}
+				return typedResp, err
+			}
+			return nil, err
+		}
+	}
+	return caller(ctx, in)
+}
+
+func (c *authJSONClient) callActivate(ctx context.Context, in *ActivateReq) (*ActivateRes, error) {
+	out := new(ActivateRes)
+	ctx, err := doJSONRequest(ctx, c.client, c.opts.Hooks, c.urls[1], in, out)
+	if err != nil {
+		twerr, ok := err.(twirp.Error)
+		if !ok {
+			twerr = twirp.InternalErrorWith(err)
+		}
+		callClientError(ctx, c.opts.Hooks, twerr)
+		return nil, err
+	}
+
+	callClientResponseReceived(ctx, c.opts.Hooks)
+
+	return out, nil
+}
+
 func (c *authJSONClient) ResetPassword(ctx context.Context, in *ResetPasswordReq) (*ResetPasswordRes, error) {
 	ctx = ctxsetters.WithPackageName(ctx, "protos")
 	ctx = ctxsetters.WithServiceName(ctx, "Auth")
@@ -445,7 +541,7 @@ func (c *authJSONClient) ResetPassword(ctx context.Context, in *ResetPasswordReq
 
 func (c *authJSONClient) callResetPassword(ctx context.Context, in *ResetPasswordReq) (*ResetPasswordRes, error) {
 	out := new(ResetPasswordRes)
-	ctx, err := doJSONRequest(ctx, c.client, c.opts.Hooks, c.urls[1], in, out)
+	ctx, err := doJSONRequest(ctx, c.client, c.opts.Hooks, c.urls[2], in, out)
 	if err != nil {
 		twerr, ok := err.(twirp.Error)
 		if !ok {
@@ -491,7 +587,7 @@ func (c *authJSONClient) Authenticate(ctx context.Context, in *AuthenticateReq) 
 
 func (c *authJSONClient) callAuthenticate(ctx context.Context, in *AuthenticateReq) (*AuthenticateRes, error) {
 	out := new(AuthenticateRes)
-	ctx, err := doJSONRequest(ctx, c.client, c.opts.Hooks, c.urls[2], in, out)
+	ctx, err := doJSONRequest(ctx, c.client, c.opts.Hooks, c.urls[3], in, out)
 	if err != nil {
 		twerr, ok := err.(twirp.Error)
 		if !ok {
@@ -537,7 +633,7 @@ func (c *authJSONClient) Authorize(ctx context.Context, in *AuthorizeReq) (*Auth
 
 func (c *authJSONClient) callAuthorize(ctx context.Context, in *AuthorizeReq) (*AuthorizeRes, error) {
 	out := new(AuthorizeRes)
-	ctx, err := doJSONRequest(ctx, c.client, c.opts.Hooks, c.urls[3], in, out)
+	ctx, err := doJSONRequest(ctx, c.client, c.opts.Hooks, c.urls[4], in, out)
 	if err != nil {
 		twerr, ok := err.(twirp.Error)
 		if !ok {
@@ -583,7 +679,7 @@ func (c *authJSONClient) Logout(ctx context.Context, in *LogoutReq) (*LogoutRes,
 
 func (c *authJSONClient) callLogout(ctx context.Context, in *LogoutReq) (*LogoutRes, error) {
 	out := new(LogoutRes)
-	ctx, err := doJSONRequest(ctx, c.client, c.opts.Hooks, c.urls[4], in, out)
+	ctx, err := doJSONRequest(ctx, c.client, c.opts.Hooks, c.urls[5], in, out)
 	if err != nil {
 		twerr, ok := err.(twirp.Error)
 		if !ok {
@@ -697,6 +793,9 @@ func (s *authServer) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 	switch method {
 	case "CreateAccount":
 		s.serveCreateAccount(ctx, resp, req)
+		return
+	case "Activate":
+		s.serveActivate(ctx, resp, req)
 		return
 	case "ResetPassword":
 		s.serveResetPassword(ctx, resp, req)
@@ -874,6 +973,186 @@ func (s *authServer) serveCreateAccountProtobuf(ctx context.Context, resp http.R
 	}
 	if respContent == nil {
 		s.writeError(ctx, resp, twirp.InternalError("received a nil *CreateAccountRes and nil error while calling CreateAccount. nil responses are not supported"))
+		return
+	}
+
+	ctx = callResponsePrepared(ctx, s.hooks)
+
+	respBytes, err := proto.Marshal(respContent)
+	if err != nil {
+		s.writeError(ctx, resp, wrapInternal(err, "failed to marshal proto response"))
+		return
+	}
+
+	ctx = ctxsetters.WithStatusCode(ctx, http.StatusOK)
+	resp.Header().Set("Content-Type", "application/protobuf")
+	resp.Header().Set("Content-Length", strconv.Itoa(len(respBytes)))
+	resp.WriteHeader(http.StatusOK)
+	if n, err := resp.Write(respBytes); err != nil {
+		msg := fmt.Sprintf("failed to write response, %d of %d bytes written: %s", n, len(respBytes), err.Error())
+		twerr := twirp.NewError(twirp.Unknown, msg)
+		ctx = callError(ctx, s.hooks, twerr)
+	}
+	callResponseSent(ctx, s.hooks)
+}
+
+func (s *authServer) serveActivate(ctx context.Context, resp http.ResponseWriter, req *http.Request) {
+	header := req.Header.Get("Content-Type")
+	i := strings.Index(header, ";")
+	if i == -1 {
+		i = len(header)
+	}
+	switch strings.TrimSpace(strings.ToLower(header[:i])) {
+	case "application/json":
+		s.serveActivateJSON(ctx, resp, req)
+	case "application/protobuf":
+		s.serveActivateProtobuf(ctx, resp, req)
+	default:
+		msg := fmt.Sprintf("unexpected Content-Type: %q", req.Header.Get("Content-Type"))
+		twerr := badRouteError(msg, req.Method, req.URL.Path)
+		s.writeError(ctx, resp, twerr)
+	}
+}
+
+func (s *authServer) serveActivateJSON(ctx context.Context, resp http.ResponseWriter, req *http.Request) {
+	var err error
+	ctx = ctxsetters.WithMethodName(ctx, "Activate")
+	ctx, err = callRequestRouted(ctx, s.hooks)
+	if err != nil {
+		s.writeError(ctx, resp, err)
+		return
+	}
+
+	d := json.NewDecoder(req.Body)
+	rawReqBody := json.RawMessage{}
+	if err := d.Decode(&rawReqBody); err != nil {
+		s.handleRequestBodyError(ctx, resp, "the json request could not be decoded", err)
+		return
+	}
+	reqContent := new(ActivateReq)
+	unmarshaler := protojson.UnmarshalOptions{DiscardUnknown: true}
+	if err = unmarshaler.Unmarshal(rawReqBody, reqContent); err != nil {
+		s.handleRequestBodyError(ctx, resp, "the json request could not be decoded", err)
+		return
+	}
+
+	handler := s.Auth.Activate
+	if s.interceptor != nil {
+		handler = func(ctx context.Context, req *ActivateReq) (*ActivateRes, error) {
+			resp, err := s.interceptor(
+				func(ctx context.Context, req interface{}) (interface{}, error) {
+					typedReq, ok := req.(*ActivateReq)
+					if !ok {
+						return nil, twirp.InternalError("failed type assertion req.(*ActivateReq) when calling interceptor")
+					}
+					return s.Auth.Activate(ctx, typedReq)
+				},
+			)(ctx, req)
+			if resp != nil {
+				typedResp, ok := resp.(*ActivateRes)
+				if !ok {
+					return nil, twirp.InternalError("failed type assertion resp.(*ActivateRes) when calling interceptor")
+				}
+				return typedResp, err
+			}
+			return nil, err
+		}
+	}
+
+	// Call service method
+	var respContent *ActivateRes
+	func() {
+		defer ensurePanicResponses(ctx, resp, s.hooks)
+		respContent, err = handler(ctx, reqContent)
+	}()
+
+	if err != nil {
+		s.writeError(ctx, resp, err)
+		return
+	}
+	if respContent == nil {
+		s.writeError(ctx, resp, twirp.InternalError("received a nil *ActivateRes and nil error while calling Activate. nil responses are not supported"))
+		return
+	}
+
+	ctx = callResponsePrepared(ctx, s.hooks)
+
+	marshaler := &protojson.MarshalOptions{UseProtoNames: !s.jsonCamelCase, EmitUnpopulated: !s.jsonSkipDefaults}
+	respBytes, err := marshaler.Marshal(respContent)
+	if err != nil {
+		s.writeError(ctx, resp, wrapInternal(err, "failed to marshal json response"))
+		return
+	}
+
+	ctx = ctxsetters.WithStatusCode(ctx, http.StatusOK)
+	resp.Header().Set("Content-Type", "application/json")
+	resp.Header().Set("Content-Length", strconv.Itoa(len(respBytes)))
+	resp.WriteHeader(http.StatusOK)
+
+	if n, err := resp.Write(respBytes); err != nil {
+		msg := fmt.Sprintf("failed to write response, %d of %d bytes written: %s", n, len(respBytes), err.Error())
+		twerr := twirp.NewError(twirp.Unknown, msg)
+		ctx = callError(ctx, s.hooks, twerr)
+	}
+	callResponseSent(ctx, s.hooks)
+}
+
+func (s *authServer) serveActivateProtobuf(ctx context.Context, resp http.ResponseWriter, req *http.Request) {
+	var err error
+	ctx = ctxsetters.WithMethodName(ctx, "Activate")
+	ctx, err = callRequestRouted(ctx, s.hooks)
+	if err != nil {
+		s.writeError(ctx, resp, err)
+		return
+	}
+
+	buf, err := ioutil.ReadAll(req.Body)
+	if err != nil {
+		s.handleRequestBodyError(ctx, resp, "failed to read request body", err)
+		return
+	}
+	reqContent := new(ActivateReq)
+	if err = proto.Unmarshal(buf, reqContent); err != nil {
+		s.writeError(ctx, resp, malformedRequestError("the protobuf request could not be decoded"))
+		return
+	}
+
+	handler := s.Auth.Activate
+	if s.interceptor != nil {
+		handler = func(ctx context.Context, req *ActivateReq) (*ActivateRes, error) {
+			resp, err := s.interceptor(
+				func(ctx context.Context, req interface{}) (interface{}, error) {
+					typedReq, ok := req.(*ActivateReq)
+					if !ok {
+						return nil, twirp.InternalError("failed type assertion req.(*ActivateReq) when calling interceptor")
+					}
+					return s.Auth.Activate(ctx, typedReq)
+				},
+			)(ctx, req)
+			if resp != nil {
+				typedResp, ok := resp.(*ActivateRes)
+				if !ok {
+					return nil, twirp.InternalError("failed type assertion resp.(*ActivateRes) when calling interceptor")
+				}
+				return typedResp, err
+			}
+			return nil, err
+		}
+	}
+
+	// Call service method
+	var respContent *ActivateRes
+	func() {
+		defer ensurePanicResponses(ctx, resp, s.hooks)
+		respContent, err = handler(ctx, reqContent)
+	}()
+
+	if err != nil {
+		s.writeError(ctx, resp, err)
+		return
+	}
+	if respContent == nil {
+		s.writeError(ctx, resp, twirp.InternalError("received a nil *ActivateRes and nil error while calling Activate. nil responses are not supported"))
 		return
 	}
 
@@ -1633,33 +1912,35 @@ func (s *authServer) PathPrefix() string {
 }
 
 var twirpFileDescriptor1 = []byte{
-	// 441 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x8c, 0x54, 0xd1, 0x8a, 0xd3, 0x40,
-	0x14, 0xdd, 0x6c, 0xbb, 0x6b, 0x72, 0xb7, 0xa2, 0x0e, 0x0b, 0x86, 0x20, 0x12, 0x06, 0x84, 0x82,
-	0x10, 0x96, 0xf5, 0x49, 0x7c, 0x6a, 0xc5, 0x07, 0x71, 0x41, 0x89, 0xfa, 0xe2, 0xdb, 0x98, 0x5e,
-	0xd3, 0x80, 0xcd, 0xd4, 0xb9, 0x13, 0xa4, 0xfe, 0x82, 0xbf, 0xe1, 0xaf, 0xf8, 0x5f, 0x32, 0x33,
-	0x49, 0x9a, 0xa4, 0x0d, 0xf5, 0x29, 0xdc, 0x73, 0xcf, 0x9c, 0x7b, 0x26, 0xe7, 0x26, 0x00, 0xa2,
-	0xd2, 0xeb, 0x64, 0xab, 0xa4, 0x96, 0xec, 0xd2, 0x3e, 0x28, 0x82, 0x8a, 0x50, 0x39, 0x8c, 0xff,
-	0xf6, 0xe0, 0xc1, 0xa2, 0xd2, 0x6b, 0x2c, 0x75, 0x91, 0x09, 0x8d, 0x29, 0xfe, 0x60, 0x11, 0xf8,
-	0x86, 0x51, 0x8a, 0x0d, 0x86, 0x5e, 0xec, 0xcd, 0x83, 0xb4, 0xad, 0x4d, 0x6f, 0x2b, 0x88, 0x7e,
-	0x4a, 0xb5, 0x0a, 0xcf, 0x5d, 0xaf, 0xa9, 0x19, 0x87, 0x19, 0x69, 0xb1, 0xbb, 0x93, 0x79, 0x8e,
-	0xab, 0xb7, 0x65, 0x38, 0x89, 0xbd, 0xb9, 0x9f, 0xf6, 0x30, 0xf6, 0x04, 0x02, 0xa3, 0xb5, 0xc8,
-	0xb1, 0xd4, 0xe1, 0xd4, 0x0a, 0xec, 0x01, 0xfe, 0x71, 0x68, 0x86, 0xd8, 0x53, 0x00, 0x42, 0xa2,
-	0x42, 0x96, 0xef, 0x70, 0x57, 0xdb, 0xe9, 0x20, 0x2c, 0x86, 0xa9, 0x39, 0x6f, 0xcd, 0x5c, 0xdd,
-	0xce, 0xdc, 0xb5, 0x28, 0xf9, 0x4c, 0xa8, 0x52, 0xdb, 0xe1, 0x09, 0xcc, 0x8c, 0xa8, 0x54, 0xc5,
-	0x2f, 0x7b, 0xbd, 0x13, 0x8a, 0xfc, 0xa6, 0xc7, 0xa7, 0x76, 0x82, 0x37, 0x3a, 0xe1, 0x39, 0x04,
-	0x77, 0x32, 0x97, 0x95, 0xfe, 0x1f, 0xf9, 0x67, 0x7b, 0x32, 0xb1, 0x10, 0xee, 0x51, 0x95, 0x65,
-	0x48, 0x64, 0x99, 0x7e, 0xda, 0x94, 0xfc, 0x8f, 0x07, 0x0f, 0x5f, 0x2b, 0x14, 0x1a, 0x17, 0x59,
-	0x26, 0xab, 0x52, 0x9f, 0x4a, 0xe6, 0x1a, 0x2e, 0x70, 0x23, 0x8a, 0xef, 0x75, 0x2c, 0xae, 0xe8,
-	0xe5, 0x35, 0x19, 0xe4, 0x15, 0xc3, 0xd5, 0x4a, 0x68, 0x7c, 0xff, 0x6d, 0x59, 0x28, 0xbd, 0xb6,
-	0x69, 0x4c, 0xd2, 0x2e, 0x64, 0x18, 0x22, 0xcb, 0x70, 0xab, 0x3f, 0xa1, 0xda, 0x50, 0x78, 0x61,
-	0x2d, 0x76, 0x21, 0x3e, 0x3f, 0x70, 0x49, 0xd6, 0x89, 0x52, 0x52, 0xd5, 0x16, 0x5d, 0x61, 0x98,
-	0x29, 0x12, 0xea, 0x0f, 0xf5, 0x78, 0x73, 0x9f, 0xd6, 0xb3, 0xd7, 0xf1, 0x7c, 0x84, 0x39, 0xa2,
-	0x79, 0xfb, 0xf7, 0x1c, 0xa6, 0x26, 0x2b, 0xf6, 0x06, 0xee, 0xf7, 0x6c, 0xb0, 0xb0, 0x89, 0x69,
-	0xf8, 0x0e, 0xa3, 0xb1, 0x0e, 0xf1, 0x33, 0x23, 0xd3, 0x9b, 0xbc, 0x97, 0x19, 0x5a, 0x8f, 0xc6,
-	0x3a, 0x46, 0x66, 0xe9, 0x36, 0xa8, 0x59, 0x63, 0xf6, 0xb8, 0xe1, 0x0e, 0xbe, 0xb4, 0x68, 0xa4,
-	0x61, 0x34, 0x5e, 0x42, 0xd0, 0x6e, 0x21, 0xbb, 0xee, 0xf2, 0x9a, 0x45, 0x8e, 0x8e, 0xa1, 0xe6,
-	0xe8, 0x0d, 0x5c, 0xba, 0x0d, 0x63, 0x8f, 0x1a, 0x46, 0xbb, 0x9e, 0xd1, 0x01, 0x44, 0xfc, 0x6c,
-	0x09, 0x5f, 0xfc, 0xe4, 0x95, 0xc3, 0xbf, 0xba, 0xbf, 0xc4, 0x8b, 0x7f, 0x01, 0x00, 0x00, 0xff,
-	0xff, 0x80, 0x28, 0x92, 0x40, 0x3a, 0x04, 0x00, 0x00,
+	// 474 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x8c, 0x54, 0x51, 0x8b, 0xd3, 0x40,
+	0x10, 0xbe, 0x5c, 0xdb, 0x33, 0x9d, 0xb6, 0x78, 0xae, 0x05, 0x43, 0x10, 0x29, 0x2b, 0x42, 0x41,
+	0x28, 0xc7, 0x09, 0x82, 0xf8, 0xd4, 0xca, 0x3d, 0x88, 0x07, 0x4a, 0xd4, 0x17, 0xdf, 0xd6, 0x74,
+	0x6c, 0x83, 0x36, 0x5b, 0x33, 0x13, 0xe5, 0xfc, 0x0b, 0xfe, 0x0d, 0xff, 0xa6, 0x20, 0xbb, 0xdb,
+	0x4d, 0x93, 0xdc, 0x95, 0xf3, 0x29, 0xcc, 0x37, 0xdf, 0x7c, 0xf3, 0xed, 0xce, 0x6c, 0x00, 0x54,
+	0xc9, 0xeb, 0xd9, 0xb6, 0xd0, 0xac, 0xc5, 0x89, 0xfd, 0x50, 0x0c, 0x25, 0x61, 0xe1, 0x30, 0xf9,
+	0x3b, 0x80, 0xbb, 0xf3, 0x92, 0xd7, 0x98, 0x73, 0x96, 0x2a, 0xc6, 0x04, 0xbf, 0x8b, 0x18, 0x42,
+	0xc3, 0xc8, 0xd5, 0x06, 0xa3, 0x60, 0x12, 0x4c, 0xfb, 0x49, 0x15, 0x9b, 0xdc, 0x56, 0x11, 0xfd,
+	0xd4, 0xc5, 0x32, 0x3a, 0x76, 0x39, 0x1f, 0x0b, 0x09, 0x43, 0x62, 0x75, 0x75, 0xa9, 0x57, 0x2b,
+	0x5c, 0xbe, 0xce, 0xa3, 0xce, 0x24, 0x98, 0x86, 0x49, 0x03, 0x13, 0x0f, 0xa1, 0x6f, 0xb4, 0xe6,
+	0x2b, 0xcc, 0x39, 0xea, 0x5a, 0x81, 0x3d, 0x20, 0xdf, 0xb7, 0xcd, 0x90, 0x78, 0x04, 0x40, 0x48,
+	0x94, 0xe9, 0xfc, 0x0d, 0x5e, 0xed, 0xec, 0xd4, 0x10, 0x31, 0x81, 0xae, 0xa9, 0xb7, 0x66, 0x06,
+	0xe7, 0x43, 0x77, 0x2c, 0x9a, 0x7d, 0x24, 0x2c, 0x12, 0x9b, 0x91, 0x33, 0x18, 0x1a, 0x51, 0x5d,
+	0x64, 0xbf, 0xec, 0xf1, 0x6e, 0x51, 0x94, 0x67, 0x0d, 0x3e, 0x55, 0x1d, 0x82, 0x83, 0x1d, 0x9e,
+	0x42, 0xff, 0x52, 0xaf, 0x74, 0xc9, 0xff, 0x23, 0xff, 0x64, 0x4f, 0x26, 0x11, 0xc1, 0x1d, 0x2a,
+	0xd3, 0x14, 0x89, 0x2c, 0x33, 0x4c, 0x7c, 0x28, 0xff, 0x04, 0x70, 0xfa, 0xaa, 0x40, 0xc5, 0x38,
+	0x4f, 0x53, 0x5d, 0xe6, 0x7c, 0xdb, 0x64, 0xc6, 0xd0, 0xc3, 0x8d, 0xca, 0xbe, 0xed, 0xc6, 0xe2,
+	0x82, 0xc6, 0xbc, 0x3a, 0xad, 0x79, 0x4d, 0x60, 0xb0, 0x54, 0x8c, 0x6f, 0xbf, 0x2c, 0xb2, 0x82,
+	0xd7, 0x76, 0x1a, 0x9d, 0xa4, 0x0e, 0x19, 0x86, 0x4a, 0x53, 0xdc, 0xf2, 0x07, 0x2c, 0x36, 0x14,
+	0xf5, 0xac, 0xc5, 0x3a, 0x24, 0xc5, 0x35, 0x97, 0x24, 0xa7, 0x70, 0x9a, 0x20, 0x21, 0xbf, 0xdb,
+	0x35, 0x32, 0xce, 0x2b, 0x77, 0x41, 0xcd, 0x9d, 0xa9, 0x6e, 0x31, 0x49, 0x3e, 0x86, 0xc1, 0x3c,
+	0xe5, 0xec, 0xc7, 0x6e, 0x19, 0xc7, 0xd0, 0x63, 0xfd, 0x15, 0x73, 0x5f, 0x68, 0x03, 0x39, 0xaa,
+	0x93, 0xe8, 0xfc, 0xef, 0x31, 0x74, 0xcd, 0xcc, 0xc4, 0x05, 0x8c, 0x1a, 0x76, 0x44, 0xe4, 0xc7,
+	0xd5, 0xbe, 0xcb, 0xf8, 0x50, 0x86, 0xe4, 0x91, 0x78, 0x0e, 0xa1, 0x97, 0x17, 0xf7, 0x3d, 0xaf,
+	0xe6, 0x2a, 0xbe, 0x01, 0x34, 0x75, 0x17, 0x30, 0x6a, 0x9c, 0x67, 0xdf, 0xbe, 0x7d, 0x21, 0xf1,
+	0xa1, 0x8c, 0x91, 0x59, 0xb8, 0x0d, 0xf4, 0xcf, 0x40, 0x3c, 0xa8, 0xba, 0x35, 0x5f, 0x6a, 0x7c,
+	0x20, 0x61, 0x34, 0x5e, 0x40, 0xbf, 0xda, 0x62, 0x31, 0xae, 0xf3, 0xfc, 0x43, 0x88, 0x6f, 0x42,
+	0x4d, 0xe9, 0x19, 0x9c, 0xb8, 0x0d, 0x15, 0xf7, 0x3c, 0xa3, 0x5a, 0xef, 0xf8, 0x1a, 0x44, 0xf2,
+	0x68, 0x01, 0x9f, 0xc2, 0xd9, 0x4b, 0x87, 0x7f, 0x76, 0x7f, 0x99, 0x67, 0xff, 0x02, 0x00, 0x00,
+	0xff, 0xff, 0x33, 0x43, 0xbe, 0xe8, 0x7a, 0x04, 0x00, 0x00,
 }
