@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/http/httputil"
 	"net/url"
 	"os"
 	"time"
@@ -77,17 +78,22 @@ func main() {
 	}
 
 	// setup mail client
-	mailer, err := mail.NewMailer(cfg, logger)
-	if err != nil {
-		logger.Fatal("could not setup mail client", zap.Error(err))
-	}
-	go func() {
-		logger.Info("starting mail consumer")
-		err := mailer.Start()
+	var mailer mail.MailQueuer
+	if cfg.Production {
+		mailer, err := mail.NewMailer(cfg, logger)
 		if err != nil {
-			logger.Error("mail consumer failed to start up", zap.Error(err))
+			logger.Fatal("could not setup mail client", zap.Error(err))
 		}
-	}()
+		go func() {
+			logger.Info("starting mail consumer")
+			err := mailer.Start()
+			if err != nil {
+				logger.Error("mail consumer failed to start up", zap.Error(err))
+			}
+		}()
+	} else {
+		mailer = &developmentMailer{logger: logger}
+	}
 	mailer.Queue("sam.schwartz96@gmail.com", "Syncapod Starting Up", "This message is to inform that the Syncapod application has started up at"+time.Now().String())
 
 	// setup stores
@@ -203,6 +209,13 @@ func toHttpRouterHandle(handlerFunc http.HandlerFunc) httprouter.Handle {
 func registerRoutes(h *handler.Handler, t *twirp.Server) *httprouter.Router {
 	router := httprouter.New()
 
+	// svelte website
+	svelteServerURL, _ := url.Parse("http://localhost:3000")
+	router.GET("/admin", toHttpRouterHandle(httputil.NewSingleHostReverseProxy(svelteServerURL).ServeHTTP))
+	router.GET("/admin/*all", toHttpRouterHandle(httputil.NewSingleHostReverseProxy(svelteServerURL).ServeHTTP))
+	// router.GET("/admin/*all_match", toHttpRouterHandle(httputil.NewSingleHostReverseProxy(svelteServerURL).ServeHTTP))
+	router.GET("/_app/*all_match", toHttpRouterHandle(httputil.NewSingleHostReverseProxy(svelteServerURL).ServeHTTP))
+
 	// oauth
 	router.GET("/oauth/login", toHttpRouterHandle(h.OAuthHandler.LoginGet))
 	router.POST("/oauth/login", toHttpRouterHandle(h.OAuthHandler.LoginPost))
@@ -223,6 +236,7 @@ func registerRoutes(h *handler.Handler, t *twirp.Server) *httprouter.Router {
 }
 
 func startServer(cfg *config.Config, logger *zap.Logger, a *autocert.Manager, router *httprouter.Router) error {
+
 	// check if we are production
 	if cfg.Production {
 		// run http server to redirect traffic and handle cert renewal
@@ -254,4 +268,12 @@ func (t *httpErrorToZap) Write(p []byte) (int, error) {
 	// t.logger.Error("http server error", zap.Error(errors.New(string(p))))
 	t.logger.Info("http server error", zap.String("error", string(p)))
 	return len(p), nil
+}
+
+type developmentMailer struct {
+	logger *zap.Logger
+}
+
+func (d *developmentMailer) Queue(to, subject, body string) {
+	d.logger.Debug("developmentMailer.Queue()", zap.String("to", to), zap.String("subject", subject), zap.String("body", body))
 }
