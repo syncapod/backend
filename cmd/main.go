@@ -160,7 +160,7 @@ func main() {
 	}
 
 	// start server
-	newRouter := registerRoutes(defaultHandler, twirpServer)
+	newRouter := registerRoutes(cfg, defaultHandler, twirpServer)
 	logger.Info("starting server")
 	err = startServer(cfg, logger, certMan, newRouter)
 	if err != nil {
@@ -206,16 +206,23 @@ func toHttpRouterHandle(handlerFunc http.HandlerFunc) httprouter.Handle {
 	}
 }
 
-func registerRoutes(h *handler.Handler, t *twirp.Server) *httprouter.Router {
+func registerRoutes(cfg *config.Config, h *handler.Handler, t *twirp.Server) *httprouter.Router {
 	router := httprouter.New()
 
 	// svelte website
 	svelteServerURL, _ := url.Parse("http://localhost:3000")
 	router.GET("/admin", toHttpRouterHandle(httputil.NewSingleHostReverseProxy(svelteServerURL).ServeHTTP))
 	router.GET("/admin/*all", toHttpRouterHandle(httputil.NewSingleHostReverseProxy(svelteServerURL).ServeHTTP))
-	// router.GET("/admin/*all_match", toHttpRouterHandle(httputil.NewSingleHostReverseProxy(svelteServerURL).ServeHTTP))
-	router.GET("/_app/*all_match", toHttpRouterHandle(httputil.NewSingleHostReverseProxy(svelteServerURL).ServeHTTP))
-
+	if cfg.Production {
+		router.GET("/_app/*all_match", toHttpRouterHandle(httputil.NewSingleHostReverseProxy(svelteServerURL).ServeHTTP))
+	} else {
+		router.GET("/", toHttpRouterHandle(httputil.NewSingleHostReverseProxy(svelteServerURL).ServeHTTP))
+		router.GET("/.svelte-kit/*all_match", toHttpRouterHandle(httputil.NewSingleHostReverseProxy(svelteServerURL).ServeHTTP))
+		router.GET("/.vite/*all_match", toHttpRouterHandle(httputil.NewSingleHostReverseProxy(svelteServerURL).ServeHTTP))
+		router.GET("/@vite/*all_match", toHttpRouterHandle(httputil.NewSingleHostReverseProxy(svelteServerURL).ServeHTTP))
+		router.GET("/node_modules/*all_match", toHttpRouterHandle(httputil.NewSingleHostReverseProxy(svelteServerURL).ServeHTTP))
+		router.GET("/src/*all_match", toHttpRouterHandle(httputil.NewSingleHostReverseProxy(svelteServerURL).ServeHTTP))
+	}
 	// oauth
 	router.GET("/oauth/login", toHttpRouterHandle(h.OAuthHandler.LoginGet))
 	router.POST("/oauth/login", toHttpRouterHandle(h.OAuthHandler.LoginPost))

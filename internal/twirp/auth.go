@@ -54,10 +54,22 @@ func (a *AuthService) ResetPassword(ctx context.Context, req *protos.ResetPasswo
 
 // Authenticate handles the authentication to syncapod and returns response
 func (a *AuthService) Authenticate(ctx context.Context, req *protos.AuthenticateReq) (*protos.AuthenticateRes, error) {
+	// don't even bother the db if username is empty or password is not valid (> 15)
+	if req.Username == "" || len(req.Password) < 15 {
+		return &protos.AuthenticateRes{
+			SessionKey: "",
+			User:       &protos.User{},
+		}, nil
+	}
+
 	userRow, seshRow, err := a.ac.Login(ctx, req.Username, req.Password, req.UserAgent)
 	if err != nil {
-		return nil, twirp.InvalidArgument.Errorf("Error on login: %w", err)
+		return &protos.AuthenticateRes{
+			SessionKey: "",
+			User:       &protos.User{},
+		}, nil
 	}
+
 	return &protos.AuthenticateRes{
 		SessionKey: seshRow.ID.String(),
 		User:       convertUserFromDB(userRow),
