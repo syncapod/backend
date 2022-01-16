@@ -37,6 +37,8 @@ type Admin interface {
 	AddPodcast(context.Context, *AddPodReq) (*AddPodRes, error)
 
 	RefreshPodcast(context.Context, *RefPodReq) (*RefPodRes, error)
+
+	SearchPodcasts(context.Context, *SearchPodReq) (*SearchPodRes, error)
 }
 
 // =====================
@@ -45,7 +47,7 @@ type Admin interface {
 
 type adminProtobufClient struct {
 	client      HTTPClient
-	urls        [2]string
+	urls        [3]string
 	interceptor twirp.Interceptor
 	opts        twirp.ClientOptions
 }
@@ -73,9 +75,10 @@ func NewAdminProtobufClient(baseURL string, client HTTPClient, opts ...twirp.Cli
 	// Build method URLs: <baseURL>[<prefix>]/<package>.<Service>/<Method>
 	serviceURL := sanitizeBaseURL(baseURL)
 	serviceURL += baseServicePath(pathPrefix, "protos", "Admin")
-	urls := [2]string{
+	urls := [3]string{
 		serviceURL + "AddPodcast",
 		serviceURL + "RefreshPodcast",
+		serviceURL + "SearchPodcasts",
 	}
 
 	return &adminProtobufClient{
@@ -178,13 +181,59 @@ func (c *adminProtobufClient) callRefreshPodcast(ctx context.Context, in *RefPod
 	return out, nil
 }
 
+func (c *adminProtobufClient) SearchPodcasts(ctx context.Context, in *SearchPodReq) (*SearchPodRes, error) {
+	ctx = ctxsetters.WithPackageName(ctx, "protos")
+	ctx = ctxsetters.WithServiceName(ctx, "Admin")
+	ctx = ctxsetters.WithMethodName(ctx, "SearchPodcasts")
+	caller := c.callSearchPodcasts
+	if c.interceptor != nil {
+		caller = func(ctx context.Context, req *SearchPodReq) (*SearchPodRes, error) {
+			resp, err := c.interceptor(
+				func(ctx context.Context, req interface{}) (interface{}, error) {
+					typedReq, ok := req.(*SearchPodReq)
+					if !ok {
+						return nil, twirp.InternalError("failed type assertion req.(*SearchPodReq) when calling interceptor")
+					}
+					return c.callSearchPodcasts(ctx, typedReq)
+				},
+			)(ctx, req)
+			if resp != nil {
+				typedResp, ok := resp.(*SearchPodRes)
+				if !ok {
+					return nil, twirp.InternalError("failed type assertion resp.(*SearchPodRes) when calling interceptor")
+				}
+				return typedResp, err
+			}
+			return nil, err
+		}
+	}
+	return caller(ctx, in)
+}
+
+func (c *adminProtobufClient) callSearchPodcasts(ctx context.Context, in *SearchPodReq) (*SearchPodRes, error) {
+	out := new(SearchPodRes)
+	ctx, err := doProtobufRequest(ctx, c.client, c.opts.Hooks, c.urls[2], in, out)
+	if err != nil {
+		twerr, ok := err.(twirp.Error)
+		if !ok {
+			twerr = twirp.InternalErrorWith(err)
+		}
+		callClientError(ctx, c.opts.Hooks, twerr)
+		return nil, err
+	}
+
+	callClientResponseReceived(ctx, c.opts.Hooks)
+
+	return out, nil
+}
+
 // =================
 // Admin JSON Client
 // =================
 
 type adminJSONClient struct {
 	client      HTTPClient
-	urls        [2]string
+	urls        [3]string
 	interceptor twirp.Interceptor
 	opts        twirp.ClientOptions
 }
@@ -212,9 +261,10 @@ func NewAdminJSONClient(baseURL string, client HTTPClient, opts ...twirp.ClientO
 	// Build method URLs: <baseURL>[<prefix>]/<package>.<Service>/<Method>
 	serviceURL := sanitizeBaseURL(baseURL)
 	serviceURL += baseServicePath(pathPrefix, "protos", "Admin")
-	urls := [2]string{
+	urls := [3]string{
 		serviceURL + "AddPodcast",
 		serviceURL + "RefreshPodcast",
+		serviceURL + "SearchPodcasts",
 	}
 
 	return &adminJSONClient{
@@ -303,6 +353,52 @@ func (c *adminJSONClient) RefreshPodcast(ctx context.Context, in *RefPodReq) (*R
 func (c *adminJSONClient) callRefreshPodcast(ctx context.Context, in *RefPodReq) (*RefPodRes, error) {
 	out := new(RefPodRes)
 	ctx, err := doJSONRequest(ctx, c.client, c.opts.Hooks, c.urls[1], in, out)
+	if err != nil {
+		twerr, ok := err.(twirp.Error)
+		if !ok {
+			twerr = twirp.InternalErrorWith(err)
+		}
+		callClientError(ctx, c.opts.Hooks, twerr)
+		return nil, err
+	}
+
+	callClientResponseReceived(ctx, c.opts.Hooks)
+
+	return out, nil
+}
+
+func (c *adminJSONClient) SearchPodcasts(ctx context.Context, in *SearchPodReq) (*SearchPodRes, error) {
+	ctx = ctxsetters.WithPackageName(ctx, "protos")
+	ctx = ctxsetters.WithServiceName(ctx, "Admin")
+	ctx = ctxsetters.WithMethodName(ctx, "SearchPodcasts")
+	caller := c.callSearchPodcasts
+	if c.interceptor != nil {
+		caller = func(ctx context.Context, req *SearchPodReq) (*SearchPodRes, error) {
+			resp, err := c.interceptor(
+				func(ctx context.Context, req interface{}) (interface{}, error) {
+					typedReq, ok := req.(*SearchPodReq)
+					if !ok {
+						return nil, twirp.InternalError("failed type assertion req.(*SearchPodReq) when calling interceptor")
+					}
+					return c.callSearchPodcasts(ctx, typedReq)
+				},
+			)(ctx, req)
+			if resp != nil {
+				typedResp, ok := resp.(*SearchPodRes)
+				if !ok {
+					return nil, twirp.InternalError("failed type assertion resp.(*SearchPodRes) when calling interceptor")
+				}
+				return typedResp, err
+			}
+			return nil, err
+		}
+	}
+	return caller(ctx, in)
+}
+
+func (c *adminJSONClient) callSearchPodcasts(ctx context.Context, in *SearchPodReq) (*SearchPodRes, error) {
+	out := new(SearchPodRes)
+	ctx, err := doJSONRequest(ctx, c.client, c.opts.Hooks, c.urls[2], in, out)
 	if err != nil {
 		twerr, ok := err.(twirp.Error)
 		if !ok {
@@ -419,6 +515,9 @@ func (s *adminServer) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 		return
 	case "RefreshPodcast":
 		s.serveRefreshPodcast(ctx, resp, req)
+		return
+	case "SearchPodcasts":
+		s.serveSearchPodcasts(ctx, resp, req)
 		return
 	default:
 		msg := fmt.Sprintf("no handler for path %q", req.URL.Path)
@@ -764,6 +863,186 @@ func (s *adminServer) serveRefreshPodcastProtobuf(ctx context.Context, resp http
 	}
 	if respContent == nil {
 		s.writeError(ctx, resp, twirp.InternalError("received a nil *RefPodRes and nil error while calling RefreshPodcast. nil responses are not supported"))
+		return
+	}
+
+	ctx = callResponsePrepared(ctx, s.hooks)
+
+	respBytes, err := proto.Marshal(respContent)
+	if err != nil {
+		s.writeError(ctx, resp, wrapInternal(err, "failed to marshal proto response"))
+		return
+	}
+
+	ctx = ctxsetters.WithStatusCode(ctx, http.StatusOK)
+	resp.Header().Set("Content-Type", "application/protobuf")
+	resp.Header().Set("Content-Length", strconv.Itoa(len(respBytes)))
+	resp.WriteHeader(http.StatusOK)
+	if n, err := resp.Write(respBytes); err != nil {
+		msg := fmt.Sprintf("failed to write response, %d of %d bytes written: %s", n, len(respBytes), err.Error())
+		twerr := twirp.NewError(twirp.Unknown, msg)
+		ctx = callError(ctx, s.hooks, twerr)
+	}
+	callResponseSent(ctx, s.hooks)
+}
+
+func (s *adminServer) serveSearchPodcasts(ctx context.Context, resp http.ResponseWriter, req *http.Request) {
+	header := req.Header.Get("Content-Type")
+	i := strings.Index(header, ";")
+	if i == -1 {
+		i = len(header)
+	}
+	switch strings.TrimSpace(strings.ToLower(header[:i])) {
+	case "application/json":
+		s.serveSearchPodcastsJSON(ctx, resp, req)
+	case "application/protobuf":
+		s.serveSearchPodcastsProtobuf(ctx, resp, req)
+	default:
+		msg := fmt.Sprintf("unexpected Content-Type: %q", req.Header.Get("Content-Type"))
+		twerr := badRouteError(msg, req.Method, req.URL.Path)
+		s.writeError(ctx, resp, twerr)
+	}
+}
+
+func (s *adminServer) serveSearchPodcastsJSON(ctx context.Context, resp http.ResponseWriter, req *http.Request) {
+	var err error
+	ctx = ctxsetters.WithMethodName(ctx, "SearchPodcasts")
+	ctx, err = callRequestRouted(ctx, s.hooks)
+	if err != nil {
+		s.writeError(ctx, resp, err)
+		return
+	}
+
+	d := json.NewDecoder(req.Body)
+	rawReqBody := json.RawMessage{}
+	if err := d.Decode(&rawReqBody); err != nil {
+		s.handleRequestBodyError(ctx, resp, "the json request could not be decoded", err)
+		return
+	}
+	reqContent := new(SearchPodReq)
+	unmarshaler := protojson.UnmarshalOptions{DiscardUnknown: true}
+	if err = unmarshaler.Unmarshal(rawReqBody, reqContent); err != nil {
+		s.handleRequestBodyError(ctx, resp, "the json request could not be decoded", err)
+		return
+	}
+
+	handler := s.Admin.SearchPodcasts
+	if s.interceptor != nil {
+		handler = func(ctx context.Context, req *SearchPodReq) (*SearchPodRes, error) {
+			resp, err := s.interceptor(
+				func(ctx context.Context, req interface{}) (interface{}, error) {
+					typedReq, ok := req.(*SearchPodReq)
+					if !ok {
+						return nil, twirp.InternalError("failed type assertion req.(*SearchPodReq) when calling interceptor")
+					}
+					return s.Admin.SearchPodcasts(ctx, typedReq)
+				},
+			)(ctx, req)
+			if resp != nil {
+				typedResp, ok := resp.(*SearchPodRes)
+				if !ok {
+					return nil, twirp.InternalError("failed type assertion resp.(*SearchPodRes) when calling interceptor")
+				}
+				return typedResp, err
+			}
+			return nil, err
+		}
+	}
+
+	// Call service method
+	var respContent *SearchPodRes
+	func() {
+		defer ensurePanicResponses(ctx, resp, s.hooks)
+		respContent, err = handler(ctx, reqContent)
+	}()
+
+	if err != nil {
+		s.writeError(ctx, resp, err)
+		return
+	}
+	if respContent == nil {
+		s.writeError(ctx, resp, twirp.InternalError("received a nil *SearchPodRes and nil error while calling SearchPodcasts. nil responses are not supported"))
+		return
+	}
+
+	ctx = callResponsePrepared(ctx, s.hooks)
+
+	marshaler := &protojson.MarshalOptions{UseProtoNames: !s.jsonCamelCase, EmitUnpopulated: !s.jsonSkipDefaults}
+	respBytes, err := marshaler.Marshal(respContent)
+	if err != nil {
+		s.writeError(ctx, resp, wrapInternal(err, "failed to marshal json response"))
+		return
+	}
+
+	ctx = ctxsetters.WithStatusCode(ctx, http.StatusOK)
+	resp.Header().Set("Content-Type", "application/json")
+	resp.Header().Set("Content-Length", strconv.Itoa(len(respBytes)))
+	resp.WriteHeader(http.StatusOK)
+
+	if n, err := resp.Write(respBytes); err != nil {
+		msg := fmt.Sprintf("failed to write response, %d of %d bytes written: %s", n, len(respBytes), err.Error())
+		twerr := twirp.NewError(twirp.Unknown, msg)
+		ctx = callError(ctx, s.hooks, twerr)
+	}
+	callResponseSent(ctx, s.hooks)
+}
+
+func (s *adminServer) serveSearchPodcastsProtobuf(ctx context.Context, resp http.ResponseWriter, req *http.Request) {
+	var err error
+	ctx = ctxsetters.WithMethodName(ctx, "SearchPodcasts")
+	ctx, err = callRequestRouted(ctx, s.hooks)
+	if err != nil {
+		s.writeError(ctx, resp, err)
+		return
+	}
+
+	buf, err := ioutil.ReadAll(req.Body)
+	if err != nil {
+		s.handleRequestBodyError(ctx, resp, "failed to read request body", err)
+		return
+	}
+	reqContent := new(SearchPodReq)
+	if err = proto.Unmarshal(buf, reqContent); err != nil {
+		s.writeError(ctx, resp, malformedRequestError("the protobuf request could not be decoded"))
+		return
+	}
+
+	handler := s.Admin.SearchPodcasts
+	if s.interceptor != nil {
+		handler = func(ctx context.Context, req *SearchPodReq) (*SearchPodRes, error) {
+			resp, err := s.interceptor(
+				func(ctx context.Context, req interface{}) (interface{}, error) {
+					typedReq, ok := req.(*SearchPodReq)
+					if !ok {
+						return nil, twirp.InternalError("failed type assertion req.(*SearchPodReq) when calling interceptor")
+					}
+					return s.Admin.SearchPodcasts(ctx, typedReq)
+				},
+			)(ctx, req)
+			if resp != nil {
+				typedResp, ok := resp.(*SearchPodRes)
+				if !ok {
+					return nil, twirp.InternalError("failed type assertion resp.(*SearchPodRes) when calling interceptor")
+				}
+				return typedResp, err
+			}
+			return nil, err
+		}
+	}
+
+	// Call service method
+	var respContent *SearchPodRes
+	func() {
+		defer ensurePanicResponses(ctx, resp, s.hooks)
+		respContent, err = handler(ctx, reqContent)
+	}()
+
+	if err != nil {
+		s.writeError(ctx, resp, err)
+		return
+	}
+	if respContent == nil {
+		s.writeError(ctx, resp, twirp.InternalError("received a nil *SearchPodRes and nil error while calling SearchPodcasts. nil responses are not supported"))
 		return
 	}
 
@@ -1365,21 +1644,21 @@ func callClientError(ctx context.Context, h *twirp.ClientHooks, err twirp.Error)
 }
 
 var twirpFileDescriptor0 = []byte{
-	// 245 bytes of a gzipped FileDescriptorProto
+	// 244 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0xe2, 0x4e, 0x4c, 0xc9, 0xcd,
-	0xcc, 0xd3, 0x2b, 0x28, 0xca, 0x2f, 0xc9, 0x17, 0x62, 0x03, 0x53, 0xc5, 0x52, 0x32, 0xe9, 0xf9,
-	0xf9, 0xe9, 0x39, 0xa9, 0xfa, 0x89, 0x05, 0x99, 0xfa, 0x89, 0x79, 0x79, 0xf9, 0x25, 0x89, 0x25,
-	0x99, 0xf9, 0x79, 0xc5, 0x10, 0x55, 0x52, 0xbc, 0x05, 0xf9, 0x29, 0xc9, 0x89, 0xc5, 0x25, 0x10,
-	0xae, 0x92, 0x2c, 0x17, 0xa7, 0x63, 0x4a, 0x4a, 0x40, 0x7e, 0x4a, 0x50, 0x6a, 0xa1, 0x90, 0x00,
-	0x17, 0x73, 0x69, 0x51, 0x8e, 0x04, 0xa3, 0x02, 0xa3, 0x06, 0x67, 0x10, 0x88, 0xa9, 0x64, 0x86,
-	0x90, 0x2e, 0x16, 0xd2, 0xe4, 0x62, 0x87, 0x6a, 0x06, 0x2b, 0xe1, 0x36, 0xe2, 0x87, 0x18, 0x52,
-	0xac, 0x17, 0x00, 0x11, 0x0e, 0x82, 0xc9, 0x2b, 0x71, 0x73, 0x71, 0x06, 0xa5, 0xa6, 0x41, 0x8c,
-	0x45, 0xe6, 0x14, 0x1b, 0xed, 0x66, 0xe4, 0x62, 0x75, 0x04, 0xb9, 0x5a, 0x28, 0x84, 0x8b, 0x0b,
-	0x62, 0x36, 0x48, 0x87, 0x90, 0x20, 0xcc, 0x2c, 0xb8, 0x73, 0xa4, 0x30, 0x84, 0x8a, 0x95, 0x14,
-	0x9a, 0x2e, 0x3f, 0x99, 0xcc, 0x24, 0xa5, 0x24, 0xaa, 0x5f, 0x66, 0xa8, 0x0f, 0xf6, 0xbc, 0x7e,
-	0x62, 0x4a, 0x4a, 0x3c, 0xd4, 0x5a, 0x2b, 0x46, 0x2d, 0xa1, 0x18, 0x2e, 0xbe, 0xa0, 0xd4, 0xb4,
-	0xa2, 0xd4, 0xe2, 0x0c, 0x0c, 0x93, 0xe1, 0x2e, 0x92, 0xc2, 0x10, 0x2a, 0x56, 0x52, 0x01, 0x9b,
-	0x2c, 0xa7, 0x24, 0x89, 0x30, 0xb9, 0x08, 0x62, 0x0e, 0x92, 0xe9, 0x4e, 0x5c, 0x51, 0x1c, 0x7a,
-	0xd6, 0x10, 0xbd, 0x49, 0x90, 0xf0, 0x36, 0x06, 0x04, 0x00, 0x00, 0xff, 0xff, 0x70, 0xe5, 0xcb,
-	0x40, 0x85, 0x01, 0x00, 0x00,
+	0xcc, 0xd3, 0x2b, 0x28, 0xca, 0x2f, 0xc9, 0x17, 0x62, 0x03, 0x53, 0xc5, 0x52, 0xbc, 0x05, 0xf9,
+	0x29, 0xc9, 0x89, 0xc5, 0x25, 0x10, 0x61, 0x25, 0x59, 0x2e, 0x4e, 0xc7, 0x94, 0x94, 0x80, 0xfc,
+	0x94, 0xa0, 0xd4, 0x42, 0x21, 0x01, 0x2e, 0xe6, 0xd2, 0xa2, 0x1c, 0x09, 0x46, 0x05, 0x46, 0x0d,
+	0xce, 0x20, 0x10, 0x53, 0xc9, 0x0c, 0x21, 0x5d, 0x2c, 0xa4, 0xc9, 0xc5, 0x0e, 0xd5, 0x0c, 0x56,
+	0xc2, 0x6d, 0xc4, 0x0f, 0x31, 0xa4, 0x58, 0x2f, 0x00, 0x22, 0x1c, 0x04, 0x93, 0x57, 0xe2, 0xe6,
+	0xe2, 0x0c, 0x4a, 0x4d, 0x83, 0x18, 0x8b, 0xcc, 0x29, 0x56, 0x52, 0xe2, 0xe2, 0x09, 0x4e, 0x4d,
+	0x2c, 0x4a, 0xce, 0x80, 0xda, 0x29, 0xc4, 0xc5, 0x52, 0x92, 0x5a, 0x51, 0x02, 0xb5, 0x14, 0xcc,
+	0x56, 0xb2, 0x46, 0x51, 0x53, 0x2c, 0xa4, 0xcd, 0xc5, 0x01, 0x35, 0xb8, 0x58, 0x82, 0x51, 0x81,
+	0x19, 0x9b, 0xcd, 0x70, 0x05, 0x46, 0xdb, 0x19, 0xb9, 0x58, 0x1d, 0x41, 0x1e, 0x17, 0x32, 0xe1,
+	0xe2, 0x82, 0x38, 0x1e, 0x24, 0x21, 0x24, 0x08, 0xd3, 0x02, 0xf7, 0xaf, 0x14, 0x86, 0x50, 0xb1,
+	0x12, 0x83, 0x90, 0x05, 0x17, 0x5f, 0x50, 0x6a, 0x5a, 0x51, 0x6a, 0x71, 0x06, 0x86, 0x4e, 0xb8,
+	0x97, 0xa4, 0x30, 0x84, 0x40, 0x3a, 0xed, 0xb8, 0xf8, 0xe0, 0xce, 0x06, 0xbb, 0x45, 0x48, 0x04,
+	0xa6, 0x0c, 0xd9, 0xcb, 0x52, 0xd8, 0x44, 0x8b, 0x95, 0x18, 0x9c, 0xb8, 0xa2, 0x38, 0xf4, 0xac,
+	0x21, 0x52, 0x49, 0x90, 0xe8, 0x32, 0x06, 0x04, 0x00, 0x00, 0xff, 0xff, 0xc6, 0xc2, 0x77, 0x89,
+	0xc4, 0x01, 0x00, 0x00,
 }

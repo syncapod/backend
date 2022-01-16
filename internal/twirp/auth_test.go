@@ -152,7 +152,7 @@ func TestAuthRpc(t *testing.T) {
 	}
 
 	autheRes, err := client.Authenticate(context.Background(),
-		&protos.AuthenticateReq{Username: testUser.Username, Password: "password"},
+		&protos.AuthenticateReq{Username: testCreateUser.Username, Password: testCreateUser.Password},
 	)
 	if err != nil {
 		t.Fatalf("Authenticate failed: %v", err)

@@ -52,4 +52,9 @@ func Test_AdminGRPC(t *testing.T) {
 	// RefreshPodcast
 	_, err = client.RefreshPodcast(ctx, &protos.RefPodReq{})
 	require.Nil(t, err, "error RefreshPodcast()")
+
+	// SearchPodscast
+	pods, err := client.SearchPodcasts(ctx, &protos.SearchPodReq{Text: "go time"})
+	require.Nil(t, err)
+	require.Equal(t, 1, len(pods.Podcasts))
 }

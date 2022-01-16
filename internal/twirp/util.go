@@ -39,22 +39,34 @@ func convertPodFromDB(pr *db.Podcast, podCon *podcast.PodController) (*protos.Po
 	return dbPodToProto(pr, cats), nil
 }
 
+// func convertPodsFromDB(prs []db.Podcast, podCon *podcast.PodController) ([]db.Podcast, error) {
+// 	var err error
+// 	pods := make([]db.Podcast, len(prs))
+// 	for i := range prs {
+// 		pods[i], err = convertPodFromDB(&prs[i], podCon)
+// 		if err != nil {
+// 			return nil, err
+// 		}
+// 	}
+// 	return pods, nil
+// }
+
 func dbPodToProto(pr *db.Podcast, cats []podcast.Category) *protos.Podcast {
 	return &protos.Podcast{
 		Id:            pr.ID.String(),
 		Title:         pr.Title,
-		Summary:       pr.Summary,
 		Author:        pr.Author,
-		Category:      podCatsToProtoCats(cats),
-		Explicit:      pr.Explicit,
-		Image:         &protos.Image{Url: pr.ImageURL},
-		Keywords:      strings.Split(strings.ReplaceAll(pr.Keywords, " ", ""), ","),
-		Language:      pr.Language,
-		LastBuildDate: timestamppb.New(pr.PubDate), // TODO: proper build date?
-		Link:          pr.LinkURL,
-		PubDate:       timestamppb.New(pr.PubDate),
-		Rss:           pr.RSSURL,
 		Episodic:      pr.Episodic,
+		Summary:       pr.Summary,
+		Link:          pr.LinkURL,
+		Image:         &protos.Image{Url: pr.ImageURL},
+		Explicit:      pr.Explicit,
+		Language:      pr.Language,
+		Keywords:      strings.Split(strings.ReplaceAll(pr.Keywords, " ", ""), ","),
+		Category:      podCatsToProtoCats(cats),
+		PubDate:       timestamppb.New(pr.PubDate),
+		LastBuildDate: timestamppb.New(pr.PubDate),
+		Rss:           pr.RSSURL,
 	}
 }
 

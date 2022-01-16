@@ -222,6 +222,9 @@ func registerRoutes(cfg *config.Config, h *handler.Handler, t *twirp.Server) *ht
 		router.GET("/@vite/*all_match", toHttpRouterHandle(httputil.NewSingleHostReverseProxy(svelteServerURL).ServeHTTP))
 		router.GET("/node_modules/*all_match", toHttpRouterHandle(httputil.NewSingleHostReverseProxy(svelteServerURL).ServeHTTP))
 		router.GET("/src/*all_match", toHttpRouterHandle(httputil.NewSingleHostReverseProxy(svelteServerURL).ServeHTTP))
+		router.GET("/@fs/*all_match", toHttpRouterHandle(httputil.NewSingleHostReverseProxy(svelteServerURL).ServeHTTP))
+		// for pnpm run preview
+		router.GET("/_app/*all_match", toHttpRouterHandle(httputil.NewSingleHostReverseProxy(svelteServerURL).ServeHTTP))
 	}
 	// oauth
 	router.GET("/oauth/login", toHttpRouterHandle(h.OAuthHandler.LoginGet))
