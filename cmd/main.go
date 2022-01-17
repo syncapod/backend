@@ -214,6 +214,7 @@ func registerRoutes(cfg *config.Config, h *handler.Handler, t *twirp.Server) *ht
 	router.GET("/admin", toHttpRouterHandle(httputil.NewSingleHostReverseProxy(svelteServerURL).ServeHTTP))
 	router.GET("/admin/*all", toHttpRouterHandle(httputil.NewSingleHostReverseProxy(svelteServerURL).ServeHTTP))
 	if cfg.Production {
+		router.GET("/", toHttpRouterHandle(httputil.NewSingleHostReverseProxy(svelteServerURL).ServeHTTP))
 		router.GET("/_app/*all_match", toHttpRouterHandle(httputil.NewSingleHostReverseProxy(svelteServerURL).ServeHTTP))
 	} else {
 		router.GET("/", toHttpRouterHandle(httputil.NewSingleHostReverseProxy(svelteServerURL).ServeHTTP))
