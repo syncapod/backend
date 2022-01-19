@@ -17,7 +17,7 @@ func NewAuthStorePG(db *pgxpool.Pool) *AuthStorePG {
 }
 
 func scanUserRow(row scanner, u *UserRow) error {
-	return row.Scan(&u.ID, &u.Email, &u.Username, &u.Birthdate, &u.PasswordHash, &u.Created, &u.LastSeen, &u.Activated)
+	return row.Scan(&u.ID, &u.Email, &u.Username, &u.Birthdate, &u.PasswordHash, &u.Created, &u.LastSeen, &u.Activated, &u.IsAdmin)
 }
 
 func scanActivationRow(row scanner, p *ActivationRow) error {
@@ -31,8 +31,8 @@ func scanPasswordResetRow(row scanner, p *PasswordResetRow) error {
 // User
 func (a *AuthStorePG) InsertUser(ctx context.Context, u *UserRow) error {
 	_, err := a.db.Exec(ctx,
-		"INSERT INTO Users (id,email,username,birthdate,password_hash,created,last_seen,activated) VALUES($1,$2,$3,$4,$5,$6,$7,$8)",
-		&u.ID, &u.Email, &u.Username, &u.Birthdate, &u.PasswordHash, &u.Created, &u.LastSeen, &u.Activated)
+		"INSERT INTO Users (id,email,username,birthdate,password_hash,created,last_seen,activated,is_admin) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)",
+		&u.ID, &u.Email, &u.Username, &u.Birthdate, &u.PasswordHash, &u.Created, &u.LastSeen, &u.Activated, &u.IsAdmin)
 	if err != nil {
 		return fmt.Errorf("InsertUser() error: %v", err)
 	}
@@ -147,7 +147,7 @@ func (a *AuthStorePG) GetSessionAndUser(ctx context.Context, sessionID uuid.UUID
 	)
 	err := result.Scan(
 		&s.ID, &s.UserID, &s.LoginTime, &s.LastSeenTime, &s.Expires, &s.UserAgent,
-		&u.ID, &u.Email, &u.Username, &u.Birthdate, &u.PasswordHash, &u.Created, &u.LastSeen, &u.Activated,
+		&u.ID, &u.Email, &u.Username, &u.Birthdate, &u.PasswordHash, &u.Created, &u.LastSeen, &u.Activated, &u.IsAdmin,
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("GetSessionAndUser() error: %v", err)

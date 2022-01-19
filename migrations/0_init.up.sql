@@ -6,7 +6,8 @@ CREATE TABLE Users (
 	password_hash BYTEA NOT NULL,
 	created TIMESTAMPTZ NOT NULL,
 	last_seen TIMESTAMPTZ NOT NULL,
-	activated BOOLEAN DEFAULT TRUE
+	activated BOOLEAN DEFAULT TRUE,
+	is_admin BOOLEAN DEFAULT FALSE
 );
 
 CREATE TABLE Sessions (

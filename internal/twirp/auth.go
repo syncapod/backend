@@ -70,6 +70,13 @@ func (a *AuthService) Authenticate(ctx context.Context, req *protos.Authenticate
 		}, nil
 	}
 
+	if req.Admin && !userRow.IsAdmin {
+		return &protos.AuthenticateRes{
+			SessionKey: "",
+			User:       &protos.User{},
+		}, nil
+	}
+
 	return &protos.AuthenticateRes{
 		SessionKey: seshRow.ID.String(),
 		User:       convertUserFromDB(userRow),
@@ -85,6 +92,9 @@ func (a *AuthService) Authorize(ctx context.Context, req *protos.AuthorizeReq) (
 	userRow, err := a.ac.Authorize(ctx, seshKey)
 	if err != nil {
 		return nil, twirp.Unauthenticated.Error("Session Invalid")
+	}
+	if req.Admin && !userRow.IsAdmin {
+		return nil, twirp.PermissionDenied.Error("Not Admin")
 	}
 	return &protos.AuthorizeRes{
 		User: convertUserFromDB(userRow),

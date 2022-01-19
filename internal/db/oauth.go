@@ -80,7 +80,7 @@ func (o *OAuthStorePG) GetAccessTokenAndUser(ctx context.Context, token []byte) 
 	)
 	err := result.Scan(
 		&a.Token, &a.AuthCode, &a.RefreshToken, &a.UserID, &a.Created, &a.Expires,
-		&u.ID, &u.Email, &u.Username, &u.Birthdate, &u.PasswordHash, &u.Created, &u.LastSeen, &u.Activated,
+		&u.ID, &u.Email, &u.Username, &u.Birthdate, &u.PasswordHash, &u.Created, &u.LastSeen, &u.Activated, &u.IsAdmin,
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("GetAccessTokenAndUser() error: %v", err)

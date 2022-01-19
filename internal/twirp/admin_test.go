@@ -3,7 +3,7 @@ package twirp
 
 import (
 	"context"
-	"fmt"
+	"log"
 	"net/http"
 	"testing"
 	"time"
@@ -13,29 +13,51 @@ import (
 	protos "github.com/sschwartz96/syncapod-backend/internal/gen"
 	"github.com/stretchr/testify/require"
 	"github.com/twitchtv/twirp"
+	"golang.org/x/crypto/bcrypt"
 )
 
 var (
 	goTimeRSSURL = "https://changelog.com/gotime/feed"
+	testAdminPwd = "AdminPasswordEasy"
 
-	testSeshAdmin = &db.SessionRow{ID: uuid.New(), UserID: testUser.ID, LoginTime: time.Now(), LastSeenTime: time.Now(), Expires: time.Now().Add(time.Hour), UserAgent: "testUserAgent"}
+	testAdminUser = &db.UserRow{
+		ID:           uuid.New(),
+		Email:        "admin@twirp.test",
+		Username:     "admin_twirp_test",
+		Birthdate:    time.Unix(0, 0).UTC(),
+		PasswordHash: genPassOrFail(testAdminPwd),
+		Created:      time.Unix(0, 0),
+		LastSeen:     time.Unix(0, 0),
+		Activated:    false,
+		IsAdmin:      true,
+	}
 )
 
+func genPassOrFail(pwd string) []byte {
+	hash, err := bcrypt.GenerateFromPassword([]byte(testAdminPwd), bcrypt.MinCost)
+	if err != nil {
+		log.Fatalln("could not generate hash from password:", pwd)
+	}
+	return hash
+}
+
 func setupAdmin() error {
-	var err error
+	// var err error
 
 	// insert user session to mimic user already authenticated
-	authStore := db.NewAuthStorePG(dbpg)
-	if err = authStore.InsertSession(context.Background(), testSeshAdmin); err != nil {
-		return fmt.Errorf("failed to insert user session: %v", err)
-	}
+	// authStore := db.NewAuthStorePG(dbpg)
+	// if err = authStore.InsertSession(context.Background(), testAdminSesh); err != nil {
+	// 	return fmt.Errorf("failed to insert user session: %v", err)
+	// }
+	insertUser(testAdminUser)
+	insertSession(testAdminSesh)
 	return nil
 }
 
 func Test_AdminGRPC(t *testing.T) {
 	// add metadata for authorization
 	header := make(http.Header)
-	header.Set(authTokenKey, testSesh.ID.String())
+	header.Set(authTokenKey, testAdminSesh.ID.String())
 
 	ctx, err := twirp.WithHTTPRequestHeaders(context.Background(), header)
 	if err != nil {
@@ -46,7 +68,7 @@ func Test_AdminGRPC(t *testing.T) {
 
 	// AddPodcast
 	addPodRes, err := client.AddPodcast(ctx, &protos.AddPodReq{Url: goTimeRSSURL})
-	require.Nil(t, err, "error AddPodcast()")
+	require.Nilf(t, err, "message: %w", err)
 	require.Equal(t, "Go Time: Golang, Software Engineering", addPodRes.Podcast.Title)
 
 	// RefreshPodcast

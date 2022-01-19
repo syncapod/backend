@@ -7,6 +7,8 @@ DROP TABLE Subscriptions;
 DROP TABLE Categories;
 DROP TABLE Episodes;
 DROP TABLE Podcasts;
+DROP TABLE PasswordReset;
+DROP TABLE Activation;
 DROP TABLE AccessTokens;
 DROP TABLE AuthCodes;
 DROP TABLE Sessions;

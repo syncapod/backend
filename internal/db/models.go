@@ -61,6 +61,7 @@ type UserRow struct {
 	Created      time.Time
 	LastSeen     time.Time
 	Activated    bool
+	IsAdmin      bool
 }
 
 // SessionRow contains all session information

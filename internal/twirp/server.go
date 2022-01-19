@@ -3,6 +3,7 @@ package twirp
 import (
 	"context"
 	"crypto/tls"
+	"log"
 	"net/http"
 
 	"github.com/google/uuid"
@@ -45,7 +46,7 @@ func NewServer(aC *auth.AuthController, aS protos.Auth, pS protos.Pod, adminS pr
 			twirpServer: protos.NewAdminServer(
 				adminS,
 				twirp.WithServerPathPrefix(prefix),
-				twirp.WithServerHooks(s.authorizeHook()),
+				twirp.WithServerHooks(s.authorizeAdminHook()),
 			),
 		},
 		{
@@ -67,6 +68,38 @@ func NewServer(aC *auth.AuthController, aS protos.Auth, pS protos.Pod, adminS pr
 	}
 	s.services = twirpServices
 	return s
+}
+
+func (s *Server) authorizeAdminHook() *twirp.ServerHooks {
+	hooks := &twirp.ServerHooks{}
+	hooks.RequestRouted = func(ctx context.Context) (context.Context, error) {
+		// extract auth token from context
+		authTokenString, ok := ctx.Value(twirpHeaderKey{}).(string)
+		if !ok {
+			return ctx, twirp.NotFound.Error("Auth Hook, Could Not Convert Auth Token to String")
+		}
+
+		authToken, err := uuid.Parse(authTokenString)
+		if err != nil {
+			return ctx, twirp.Unauthenticated.Error("Auth Hook, Could Not Parse Auth Token -> UUID ")
+		}
+
+		user, err := s.authC.Authorize(ctx, authToken)
+		if err != nil {
+			return ctx, twirp.Unauthenticated.Error("")
+		}
+		log.Println(user)
+		if !user.IsAdmin {
+			return ctx, twirp.PermissionDenied.Error("User is not admin")
+		}
+		ctx = context.WithValue(ctx, twirpHeaderKey{}, twirpCtxData{
+			authToken: authToken,
+			user:      user,
+		})
+		return ctx, nil
+
+	}
+	return hooks
 }
 
 func (s *Server) authorizeHook() *twirp.ServerHooks {

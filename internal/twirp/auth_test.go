@@ -30,6 +30,7 @@ var (
 		Created:      time.Unix(0, 0),
 		LastSeen:     time.Unix(0, 0),
 		Activated:    false,
+		IsAdmin:      false,
 	}
 )
 
@@ -37,12 +38,19 @@ type mailStub struct{}
 
 func (m *mailStub) Queue(to, subject, body string) {}
 
+func insertSession(s *db.SessionRow) {
+	oa := db.NewAuthStorePG(dbpg)
+	err := oa.InsertSession(context.Background(), s)
+	if err != nil {
+		log.Fatalln("db.twirp_test.insertSession() error:", err)
+	}
+}
+
 func insertUser(u *db.UserRow) {
 	a := db.NewAuthStorePG(dbpg)
 	err := a.InsertUser(context.Background(), u)
 	if err != nil {
-		log.Println("db.auth_test.insertUser() id:", u.ID)
-		log.Fatalln("db.auth_test.insertUser() error:", err)
+		log.Fatalln("db.twirp_test.insertUser() error:", err)
 	}
 }
 
@@ -104,7 +112,6 @@ func TestMain(m *testing.M) {
 
 func setupAuthDB() error {
 	insertUser(testUser)
-
 	return nil
 }
 
@@ -315,13 +322,13 @@ func TestAuthService_Activate(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "invalid uuid format",
-			args:  args{req:  &protos.ActivateReq{Token: "asdf"}},
+			name:    "invalid uuid format",
+			args:    args{req: &protos.ActivateReq{Token: "asdf"}},
 			wantErr: true,
 		},
 		{
-			name: "invalid uuid",
-			args:  args{req:  &protos.ActivateReq{Token: uuid.New().String()}},
+			name:    "invalid uuid",
+			args:    args{req: &protos.ActivateReq{Token: uuid.New().String()}},
 			wantErr: true,
 		},
 	}
@@ -330,6 +337,52 @@ func TestAuthService_Activate(t *testing.T) {
 			_, err := client.Activate(context.Background(), tt.args.req)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("AuthService.Activate() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+		})
+	}
+}
+
+func TestAuthService_Authenticate(t *testing.T) {
+	client := protos.NewAuthProtobufClient(
+		"http://localhost:8081",
+		http.DefaultClient,
+		twirp.WithClientPathPrefix(prefix),
+	)
+	type args struct {
+		req *protos.AuthenticateReq
+	}
+	tests := []struct {
+		name    string
+		args    args
+		wantErr bool
+	}{
+		{
+			name: "Success",
+			args: args{req: &protos.AuthenticateReq{
+				Username:     testAdminUser.Username,
+				Password:     testAdminPwd,
+				StayLoggedIn: true,
+				UserAgent:    "testAgent",
+				Admin:        true,
+			}},
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			response, err := client.Authenticate(context.Background(), tt.args.req)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("AuthService.Activate() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if len(response.SessionKey) == 0 {
+				t.Errorf("AuthService.Activate() error: len(SessionKey) == 0\n\tresponse = %v", response)
+				return
+			}
+
+			if response.User.Username != tt.args.req.Username && response.User.Email != tt.args.req.Username {
+				t.Errorf("AuthService.Activate() error: username does not match the return user")
 				return
 			}
 		})

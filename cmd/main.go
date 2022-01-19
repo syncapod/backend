@@ -143,7 +143,7 @@ func main() {
 
 	// debug TODO: remove
 	if cfg.Debug || true {
-		_, err := authController.CreateUser(context.Background(), "testUser@syncapod.com", "testUser", "testUser123!@#", time.Now())
+		_, err := authController.CreateUser(context.Background(), "testUser@syncapod.com", "testUser", "EasyPasswordRemember", time.Now().AddDate(-18, 0, 0))
 		if err != nil {
 			log.Printf("failed to create test user: %v\n", err)
 		}
