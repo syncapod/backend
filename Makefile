@@ -7,7 +7,7 @@ endif
 .PHONY: db migrate run test testv test-db coverage protos
 
 db:
-	docker run -d --rm -ti --network host -e POSTGRES_PASSWORD=secret postgres
+	docker run -d --rm -ti -p 5432:5432 -e POSTGRES_PASSWORD=secret postgres:latest
 
 migrate:
 	migrate -source file://migrations \
