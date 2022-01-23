@@ -13,6 +13,7 @@ import (
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/julienschmidt/httprouter"
 	"github.com/sschwartz96/syncapod-backend/internal/auth"
@@ -26,6 +27,7 @@ import (
 	"github.com/sschwartz96/syncapod-backend/internal/mail"
 	"github.com/sschwartz96/syncapod-backend/internal/podcast"
 	"golang.org/x/crypto/acme/autocert"
+	"golang.org/x/crypto/bcrypt"
 )
 
 func main() {
@@ -143,6 +145,18 @@ func main() {
 
 	// debug TODO: remove
 	if cfg.Debug || true {
+		hash, _ := bcrypt.GenerateFromPassword([]byte("EasyPasswordRemeber"), bcrypt.MinCost)
+		authStore.InsertUser(context.Background(), &db.UserRow{
+			ID:           uuid.New(),
+			Email:        "testAdmin@syncapod.com",
+			Username:     "admin",
+			Birthdate:    time.Now().AddDate(-18, 0, 0),
+			PasswordHash: hash,
+			Created:      time.Now(),
+			LastSeen:     time.Now(),
+			Activated:    true,
+			IsAdmin:      true,
+		})
 		_, err := authController.CreateUser(context.Background(), "testUser@syncapod.com", "testUser", "EasyPasswordRemember", time.Now().AddDate(-18, 0, 0))
 		if err != nil {
 			log.Printf("failed to create test user: %v\n", err)

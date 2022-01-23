@@ -44,17 +44,19 @@ func (c *RSSController) UpdatePodcasts() error {
 		}
 		var wg sync.WaitGroup
 		for i := range podcasts {
-			pod := &podcasts[i]
+			pod := podcasts[i]
 			wg.Add(1)
-			go func() {
-				log.Println("starting updatePodcast():", pod.Title)
-				err = c.updatePodcast(pod)
+			go func(podcast db.Podcast) {
+				log.Println("starting updatePodcast():", podcast.Title)
+				err = c.updatePodcast(podcast)
 				if err != nil {
-					fmt.Printf("UpdatePodcasts() error updating podcast %v, error = %v\n", pod, err)
+					// TODO: proper error handling
+					fmt.Printf("UpdatePodcasts() error updating podcast %v, error = %v\n", podcast, err)
+				} else {
+					log.Println("UpdatePodcasts() successfully finished updatePodcast():", podcast.Title)
 				}
-				log.Println("finished updatePodcast():", pod.Title)
 				wg.Done()
-			}()
+			}(pod)
 		}
 		wg.Wait()
 	}
@@ -65,7 +67,7 @@ func (c *RSSController) UpdatePodcasts() error {
 }
 
 // updatePodcast updates the given podcast via RSS feed
-func (c *RSSController) updatePodcast(pod *db.Podcast) error {
+func (c *RSSController) updatePodcast(pod db.Podcast) error {
 	// get rss from url
 	rssResp, err := DownloadRSS(pod.RSSURL)
 	if err != nil {
@@ -146,8 +148,9 @@ func (c *RSSController) AddNewPodcast(url string, r io.Reader) (*db.Podcast, err
 }
 
 func DownloadRSS(url string) (io.ReadCloser, error) {
-	http.DefaultClient.Timeout = time.Second * 5
-	resp, err := http.Get(url)
+	httpClient := &http.Client{}
+	httpClient.Timeout = time.Second * 10
+	resp, err := httpClient.Get(url)
 	if err != nil {
 		return nil, fmt.Errorf("DownloadRSS() error: %v", err)
 	}
