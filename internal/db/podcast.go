@@ -11,6 +11,14 @@ import (
 	"github.com/jackc/pgx/v4/pgxpool"
 )
 
+const (
+	episodeColumns = "id,title,enclosure_url,enclosure_length,enclosure_type,pub_date,description,duration,link_url,image_url,image_title,explicit,episode,season,episode_type,subtitle,summary,encoded,podcast_id"
+)
+
+var (
+	episodeColumnLength = len(strings.Split(episodeColumns, ","))
+)
+
 type PodcastStore struct {
 	db *pgxpool.Pool
 }
@@ -125,6 +133,37 @@ func (p *PodcastStore) InsertEpisode(ctx context.Context, e *Episode) error {
 		&e.ID, &e.Title, &e.EnclosureURL, &e.EnclosureLength, &e.EnclosureType, &e.PubDate, &e.Description, &e.Duration, &e.LinkURL, &e.ImageURL, &e.ImageTitle, &e.Explicit, &e.Episode, &e.Season, &e.EpisodeType, &e.Subtitle, &e.Summary, &e.Encoded, &e.PodcastID)
 	if err != nil {
 		return fmt.Errorf("InsertEpisode() error: %v", err)
+	}
+	return nil
+}
+
+func (p *PodcastStore) InsertEpisodes(ctx context.Context, episodes []Episode) error {
+	queryStr := strings.Builder{}
+	queryStr.WriteString(
+		fmt.Sprintf("INSERT INTO Episodes(%s) VALUES ", episodeColumns),
+	)
+	queryValues := []interface{}{}
+	counter := 1
+	for i := range episodes {
+		e := episodes[i]
+		queryStr.WriteString("(")
+		for j := 0; j < episodeColumnLength; j++ {
+			queryStr.WriteString(fmt.Sprintf("$%d", counter))
+			if j != episodeColumnLength-1 {
+				queryStr.WriteString(",")
+			}
+			counter++
+		}
+		queryStr.WriteString(")")
+		if i != len(episodes)-1 {
+			queryStr.WriteString(",\n")
+		}
+		queryValues = append(queryValues, &e.ID, &e.Title, &e.EnclosureURL, &e.EnclosureLength, &e.EnclosureType, &e.PubDate, &e.Description, &e.Duration, &e.LinkURL, &e.ImageURL, &e.ImageTitle, &e.Explicit, &e.Episode, &e.Season, &e.EpisodeType, &e.Subtitle, &e.Summary, &e.Encoded, &e.PodcastID)
+	}
+
+	_, err := p.db.Exec(ctx, queryStr.String(), queryValues...)
+	if err != nil {
+		return fmt.Errorf("InsertEpisodes() error: %v\nQuery:%s", err, queryStr.String())
 	}
 	return nil
 }

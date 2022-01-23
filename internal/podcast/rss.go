@@ -133,16 +133,18 @@ func (c *RSSController) AddNewPodcast(url string, r io.Reader) (*db.Podcast, err
 		return nil, fmt.Errorf("AddNewPodcast() error adding new podcast: %v", err)
 	}
 
+	episodes := make([]db.Episode, len(rssPod.Channel.Items))
 	// loop through episodes and save them
 	for i := range rssPod.Channel.Items {
 		epi, err := rssItemToDBEpisode(&rssPod.Channel.Items[i], pod.ID)
 		if err != nil {
 			return nil, fmt.Errorf("AddNewPodcast() error converting rss item to db episode: %v", err)
 		}
-		err = c.podController.InsertEpisode(context.Background(), epi)
-		if err != nil {
-			log.Println("AddNewPodcast() couldn't insert episode: ", err)
-		}
+		episodes[i] = *epi
+	}
+	err = c.podController.InsertEpisodes(context.Background(), episodes)
+	if err != nil {
+		log.Println("AddNewPodcast() couldn't insert episodes: ", err)
 	}
 	return pod, nil
 }
@@ -353,6 +355,7 @@ func rssItemToDBEpisode(r *rssItem, podID uuid.UUID) (*db.Episode, error) {
 	if err != nil {
 		return nil, err
 	}
+	log.Println("our uuid:", newUUID)
 
 	return &db.Episode{
 		ID:              newUUID,

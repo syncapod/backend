@@ -272,3 +272,54 @@ func TestPodcastStore_InsertCategory(t *testing.T) {
 		})
 	}
 }
+
+func TestPodcastStore_InsertEpisodes(t *testing.T) {
+	testEpisodes1 := []Episode{{ID: uuid.New(), Title: "Test Episode", EnclosureURL: "", EnclosureLength: 0, EnclosureType: "", PubDate: time.Unix(1000, 0), Description: "", Duration: 0, LinkURL: "", ImageURL: "", ImageTitle: "", Explicit: "", Episode: 123, Season: 0, EpisodeType: "", Subtitle: "", Summary: "", Encoded: "", PodcastID: testPod.ID}}
+	testEpisodes2 := []Episode{
+		{ID: uuid.New(), Title: "Test Episode", EnclosureURL: "", EnclosureLength: 0, EnclosureType: "", PubDate: time.Unix(1000, 0), Description: "", Duration: 0, LinkURL: "", ImageURL: "", ImageTitle: "", Explicit: "", Episode: 123, Season: 0, EpisodeType: "", Subtitle: "", Summary: "", Encoded: "", PodcastID: testPod.ID},
+		{ID: uuid.New(), Title: "Test Episode", EnclosureURL: "", EnclosureLength: 0, EnclosureType: "", PubDate: time.Unix(1000, 0), Description: "", Duration: 0, LinkURL: "", ImageURL: "", ImageTitle: "", Explicit: "", Episode: 123, Season: 0, EpisodeType: "", Subtitle: "", Summary: "", Encoded: "", PodcastID: testPod.ID},
+		{ID: uuid.New(), Title: "Test Episode", EnclosureURL: "", EnclosureLength: 0, EnclosureType: "", PubDate: time.Unix(1000, 0), Description: "", Duration: 0, LinkURL: "", ImageURL: "", ImageTitle: "", Explicit: "", Episode: 123, Season: 0, EpisodeType: "", Subtitle: "", Summary: "", Encoded: "", PodcastID: testPod.ID},
+	}
+	type fields struct {
+		db *pgxpool.Pool
+	}
+	type args struct {
+		ctx      context.Context
+		episodes []Episode
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		wantErr bool
+	}{
+		{
+			name:   "1 Episode",
+			fields: fields{dbpg},
+			args: args{
+				ctx:      context.Background(),
+				episodes: testEpisodes1,
+			},
+			wantErr: false,
+		},
+		{
+			name:   "3 Episodes",
+			fields: fields{dbpg},
+			args: args{
+				ctx:      context.Background(),
+				episodes: testEpisodes2,
+			},
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := &PodcastStore{
+				db: tt.fields.db,
+			}
+			if err := p.InsertEpisodes(tt.args.ctx, tt.args.episodes); (err != nil) != tt.wantErr {
+				t.Errorf("PodcastStore.InsertEpisodes() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}

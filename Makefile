@@ -29,6 +29,9 @@ test:
 testv:
 	go test ./internal/... -v
 
+testrace:
+	go test ./internal/... -race
+
 coverage:
 	go test ./... -cover
 
