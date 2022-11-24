@@ -63,6 +63,7 @@ func NewMailer(cfg *config.Config, logger *zap.Logger) (*Mailer, error) {
 
 // Queue takes "to" email, subject, body of message and queues it up to send
 func (m *Mailer) Queue(to, subject, body string) {
+	m.logger.Info("queuing mail", zap.String("to", to), zap.String("subject", subject))
 	m.queueChan <- mail{to: to, subject: subject, body: body}
 }
 

@@ -2,6 +2,7 @@ package podcast
 
 import (
 	"context"
+	"net/url"
 	"reflect"
 	"testing"
 	"time"
@@ -19,16 +20,10 @@ func Test_RSS(t *testing.T) {
 	rssController := NewRSSController(podController)
 	//rssURL := "https://changelog.com/gotime/feed"
 	rssURL := "https://feeds.twit.tv/twit.xml"
-
-	// download from the internet first
-	r, err := DownloadRSS(rssURL)
-	if err != nil {
-		t.Fatalf("Test_RSS() error downloading rss")
-	}
-	defer r.Close()
+	u, _ := url.Parse(rssURL)
 
 	// test add the podcast
-	pod, err := rssController.AddNewPodcast(rssURL, r)
+	pod, err := rssController.AddPodcast(context.Background(), u)
 	if err != nil {
 		t.Fatalf("Test_RSS() error adding new podcast: %v", err)
 	}

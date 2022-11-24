@@ -2,8 +2,9 @@ package twirp
 
 import (
 	"context"
-	"log"
-	"net/http"
+	"fmt"
+	"net/url"
+	"strings"
 
 	protos "github.com/sschwartz96/syncapod-backend/internal/gen"
 	"github.com/sschwartz96/syncapod-backend/internal/podcast"
@@ -24,20 +25,26 @@ func NewAdminService(podCon *podcast.PodController, rssCon *podcast.RSSControlle
 
 // Podcasts
 func (a *AdminService) AddPodcast(ctx context.Context, req *protos.AddPodReq) (*protos.AddPodRes, error) {
-	rssReq, err := http.Get(req.Url)
-	if err != nil {
-		return nil, twirp.Internal.Errorf("error http.Get(url): %w", err)
+	urlStr := strings.TrimSpace(req.Url)
+	if urlStr == "" {
+		return nil, twirp.InvalidArgumentError("Url", "Url cannot be empty")
 	}
-	defer rssReq.Body.Close()
-	pod, err := a.rssCon.AddNewPodcast(req.Url, rssReq.Body)
+
+	url, err := url.Parse(urlStr)
 	if err != nil {
-		return nil, twirp.Internal.Errorf("error AddNewPodcast(): %w", err)
+		return nil, twirp.InvalidArgumentError("Url", fmt.Sprintf("Url could not be parse: %s", err.Error()))
 	}
-	log.Println("podcast cats:", pod.Category)
+
+	pod, err := a.rssCon.AddPodcast(ctx, url)
+	if err != nil {
+		return nil, twirp.InternalErrorf("Could not add podcast: %w", err)
+	}
+
 	protoPod, err := convertPodFromDB(pod, a.podCon)
 	if err != nil {
-		return nil, twirp.Internal.Errorf("error converting db pod to proto pod: %w", err)
+		return nil, twirp.InternalErrorf("Could not convert podcast to protobuf object: %w", err)
 	}
+
 	return &protos.AddPodRes{Podcast: protoPod}, nil
 }
 

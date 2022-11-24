@@ -3,7 +3,6 @@ package twirp
 import (
 	"context"
 	"crypto/tls"
-	"log"
 	"net/http"
 
 	"github.com/google/uuid"
@@ -88,7 +87,6 @@ func (s *Server) authorizeAdminHook() *twirp.ServerHooks {
 		if err != nil {
 			return ctx, twirp.Unauthenticated.Error("")
 		}
-		log.Println(user)
 		if !user.IsAdmin {
 			return ctx, twirp.PermissionDenied.Error("User is not admin")
 		}

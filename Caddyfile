@@ -1,0 +1,3 @@
+syncapod.com, mail.syncapod.com
+
+reverse_proxy syncapod:3030

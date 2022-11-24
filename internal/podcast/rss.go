@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -48,7 +49,9 @@ func (c *RSSController) UpdatePodcasts() error {
 			wg.Add(1)
 			go func(podcast db.Podcast) {
 				log.Println("starting updatePodcast():", podcast.Title)
-				err = c.updatePodcast(podcast)
+				ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+				defer cancel()
+				err = c.updatePodcast(ctx, podcast)
 				if err != nil {
 					// TODO: proper error handling
 					fmt.Printf("UpdatePodcasts() error updating podcast %v, error = %v\n", podcast, err)
@@ -67,9 +70,10 @@ func (c *RSSController) UpdatePodcasts() error {
 }
 
 // updatePodcast updates the given podcast via RSS feed
-func (c *RSSController) updatePodcast(pod db.Podcast) error {
+func (c *RSSController) updatePodcast(ctx context.Context, pod db.Podcast) error {
+	url, _ := url.Parse(pod.RSSURL)
 	// get rss from url
-	rssResp, err := DownloadRSS(pod.RSSURL)
+	rssResp, err := downloadRSS(ctx, url)
 	if err != nil {
 		return fmt.Errorf("updatePodcast() error downloading rss: %v", err)
 	}
@@ -103,10 +107,24 @@ func (c *RSSController) updatePodcast(pod db.Podcast) error {
 	return nil
 }
 
+func (c *RSSController) AddPodcast(ctx context.Context, rssURL *url.URL) (*db.Podcast, error) {
+	pod, _ := c.podController.FindPodcastByRSS(ctx, rssURL.String())
+	if pod != nil {
+		return nil, fmt.Errorf("podcast already exists")
+	}
+	reader, err := downloadRSS(ctx, rssURL)
+	if err != nil {
+		return nil, err
+	}
+	return c.AddNewPodcast(rssURL.String(), reader)
+}
+
 // AddNewPodcast takes RSS url and a reader to the RSS feed and
 // inserts the podcast and its episodes into the db
 // returns error if podcast already exists
-func (c *RSSController) AddNewPodcast(url string, r io.Reader) (*db.Podcast, error) {
+func (c *RSSController) AddNewPodcast(url string, r io.ReadCloser) (*db.Podcast, error) {
+	defer r.Close()
+
 	// check if podcast already contains that rss url
 	exists := c.podController.DoesPodcastExist(context.Background(), url)
 	if exists {
@@ -146,17 +164,23 @@ func (c *RSSController) AddNewPodcast(url string, r io.Reader) (*db.Podcast, err
 	if err != nil {
 		log.Println("AddNewPodcast() couldn't insert episodes: ", err)
 	}
+
 	return pod, nil
 }
 
-func DownloadRSS(url string) (io.ReadCloser, error) {
-	httpClient := &http.Client{}
-	httpClient.Timeout = time.Second * 10
-	resp, err := httpClient.Get(url)
+func downloadRSS(ctx context.Context, url *url.URL) (io.ReadCloser, error) {
+	client := http.Client{Timeout: time.Second * 5}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url.String(), nil)
 	if err != nil {
-		return nil, fmt.Errorf("DownloadRSS() error: %v", err)
+		return nil, err
 	}
-	return resp.Body, nil
+
+	res, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	return res.Body, nil
 }
 
 // parseRSS takes in reader path and unmarshals the data
@@ -355,7 +379,6 @@ func rssItemToDBEpisode(r *rssItem, podID uuid.UUID) (*db.Episode, error) {
 	if err != nil {
 		return nil, err
 	}
-	log.Println("our uuid:", newUUID)
 
 	return &db.Episode{
 		ID:              newUUID,

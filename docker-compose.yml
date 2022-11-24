@@ -1,42 +1,55 @@
 version: "3.8"
 
 services:
-    db:
-        image: postgres:latest
-        container_name: db
-        restart: always
-        environment:
-            - POSTGRES_DB=syncapod
-            - POSTGRES_USER=syncapod
-            - POSTGRES_PASSWORD=${DB_PASS}
-        volumes:
-            - pg-data:/var/lib/postgresql/data
-        networks:
-            - backend
+  db:
+    image: postgres:latest
+    container_name: db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=syncapod
+      - POSTGRES_USER=syncapod
+      - POSTGRES_PASSWORD=${DB_PASS}
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    networks:
+      - backend
 
-    syncapod:
-        build:
-            context: .
-        container_name: syncapod
-        restart: always
-        volumes:
-            - /certs:/certs
-        networks:
-            - backend
-            - syncapod_mail_net
-        ports:
-            - "80:80"
-            - "443:443"
-        depends_on:
-            - db
+  caddy:
+    image: caddy:latest
+    container_name: caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - $PWD/syncapod/Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - backend
+
+  syncapod:
+    build:
+      context: .
+    container_name: syncapod
+    restart: unless-stopped
+    networks:
+      - backend
+      - syncapod_mail_net
+    depends_on:
+      - db
+      - caddy
 
 volumes:
-    pg-data:
+  pg-data:
+  caddy_data:
+  caddy_config:
 
 networks:
-    backend:
-        driver: bridge
-        name: backend
-    syncapod_mail_net:
-        external: true
-        name: syncapod_mail_net
+  backend:
+    driver: bridge
+    name: backend
+  syncapod_mail_net:
+    external: true
+    name: syncapod_mail_net

@@ -26,7 +26,6 @@ import (
 	"github.com/sschwartz96/syncapod-backend/internal/handler"
 	"github.com/sschwartz96/syncapod-backend/internal/mail"
 	"github.com/sschwartz96/syncapod-backend/internal/podcast"
-	"golang.org/x/crypto/acme/autocert"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -50,9 +49,7 @@ func main() {
 	if err != nil {
 		log.Fatalln("could not initiate logger:", err)
 	}
-
-	// manage certificate
-	certMan := createCertManager(cfg)
+	logger.Info("starting syncapod", zap.Bool("production", cfg.Production))
 
 	// setup context
 	ctx, cncFn := context.WithTimeout(context.Background(), time.Second*5)
@@ -68,6 +65,7 @@ func main() {
 	if err != nil {
 		logger.Fatal("could not connect to db", zap.Error(err))
 	}
+	logger.Info("successfully connected to db, running migrations")
 
 	// run migrations
 	mig, err := migrate.New("file://"+cfg.MigrationsDir, pgURI)
@@ -78,14 +76,21 @@ func main() {
 	if err != nil && err.Error() != "no change" {
 		logger.Fatal("error running startup db migration", zap.Error(err))
 	}
+	if err.Error() == "no change" {
+		logger.Info("no change in migrations")
+	} else {
+		logger.Info("successfully ran migrations")
+	}
 
 	// setup mail client
-	var mailer mail.MailQueuer
+	logger.Info("setting up mailer")
+	var mailQueuer mail.MailQueuer
 	if cfg.Production {
 		mailer, err := mail.NewMailer(cfg, logger)
 		if err != nil {
 			logger.Fatal("could not setup mail client", zap.Error(err))
 		}
+		mailQueuer = mailer
 		go func() {
 			logger.Info("starting mail consumer")
 			err := mailer.Start()
@@ -94,9 +99,10 @@ func main() {
 			}
 		}()
 	} else {
-		mailer = &developmentMailer{logger: logger}
+		mailQueuer = &developmentMailer{logger: logger}
 	}
-	mailer.Queue("sam.schwartz96@gmail.com", "Syncapod Starting Up", "This message is to inform that the Syncapod application has started up at"+time.Now().String())
+	logger.Info("successfully set up mailer")
+	mailQueuer.Queue("sam.schwartz96@gmail.com", "Syncapod Starting Up", "This message is to inform that the Syncapod application has started up at"+time.Now().String())
 
 	// setup stores
 	authStore := db.NewAuthStorePG(pgdb)
@@ -104,7 +110,7 @@ func main() {
 	podStore := db.NewPodcastStore(pgdb)
 
 	// setup controllers
-	authController := auth.NewAuthController(authStore, oauthStore, mailer)
+	authController := auth.NewAuthController(authStore, oauthStore, mailQueuer)
 	podController, err := podcast.NewPodController(podStore)
 	if err != nil {
 		logger.Fatal("error setting up pod controller", zap.Error(err))
@@ -161,38 +167,22 @@ func main() {
 		if err != nil {
 			log.Printf("failed to create test user: %v\n", err)
 		}
-		r, err := podcast.DownloadRSS("https://feeds.twit.tv/twit.xml")
-		if err != nil {
-			log.Printf("failed to download debug podcast: %v\n", err)
-		}
-		podID, err := rssController.AddNewPodcast("https://feeds.twit.tv/twit.xml", r)
+		url, _ := url.Parse("https://feeds.twit.tv/twit.xml")
+		pod, err := rssController.AddPodcast(context.Background(), url)
 		if err != nil {
 			log.Printf("failed to add debug podcast: %v\n", err)
 		} else {
-			log.Println("podID:", podID)
+			log.Println("podID:", pod.ID)
 		}
 	}
 
 	// start server
 	newRouter := registerRoutes(cfg, defaultHandler, twirpServer)
 	logger.Info("starting server")
-	err = startServer(cfg, logger, certMan, newRouter)
+	err = startServer(cfg, logger, newRouter)
 	if err != nil {
 		logger.Fatal("startServer error", zap.Error(err))
 	}
-
-}
-
-func createCertManager(cfg *config.Config) *autocert.Manager {
-	if cfg.Production {
-		return &autocert.Manager{
-			Prompt:     autocert.AcceptTOS,
-			Cache:      autocert.DirCache(cfg.CertDir),
-			HostPolicy: autocert.HostWhitelist("syncapod.com", "mail.syncapod.com", "www.syncapod.com", "45.79.25.193", "mta-sts.syncapod.com"),
-			Email:      "sam.schwartz96@gmail.com",
-		}
-	}
-	return nil
 }
 
 func updatePodcasts(logger *zap.Logger, rssController *podcast.RSSController) {
@@ -260,29 +250,17 @@ func registerRoutes(cfg *config.Config, h *handler.Handler, t *twirp.Server) *ht
 	return router
 }
 
-func startServer(cfg *config.Config, logger *zap.Logger, a *autocert.Manager, router *httprouter.Router) error {
-
-	// check if we are production
-	if cfg.Production {
-		// run http server to redirect traffic and handle cert renewal
-		go func() {
-			err := http.ListenAndServe(":http", a.HTTPHandler(nil))
-			logger.Fatal("error starting up http redirect listener", zap.Error(err))
-		}()
-		// create server
-		s := &http.Server{
-			Addr:         ":https",
-			TLSConfig:    a.TLSConfig(),
-			Handler:      router,
-			ReadTimeout:  time.Second * 15,
-			WriteTimeout: time.Second * 15,
-			ErrorLog:     log.New(&httpErrorToZap{logger}, "", 0), // TODO: create struct that contains Write([]byte) function to "convert" to zap.logger
-		}
-		return s.ListenAndServeTLS("", "")
-	} else {
-		// just standup a default server
-		return http.ListenAndServe(fmt.Sprintf(":%d", cfg.Port), router)
+func startServer(cfg *config.Config, logger *zap.Logger, router *httprouter.Router) error {
+	// create server
+	s := &http.Server{
+		Handler:      router,
+		Addr:         ":" + fmt.Sprintf("%d", cfg.Port),
+		ReadTimeout:  time.Second * 5,
+		WriteTimeout: time.Second * 5,
+		IdleTimeout:  time.Second * 5,
+		ErrorLog:     log.New(&httpErrorToZap{logger}, "", 0), // TODO: create struct that contains Write([]byte) function to "convert" to zap.logger
 	}
+	return s.ListenAndServe()
 }
 
 type httpErrorToZap struct {
