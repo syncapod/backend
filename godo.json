@@ -1,0 +1,1 @@
+{"todo":[{"id":0,"text":"Setup Caddy and use it to manage TLS certs","status":"todo"},{"id":1,"text":"Integrate SQLC instead of hardcoded queries","status":"todo"},{"id":2,"text":"Use chi router instead of the old ShiftPath","status":"todo"}],"doing":[],"done":[],"current_index":3}
