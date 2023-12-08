@@ -31,7 +31,7 @@ type TwirpService struct {
 	twirpServer protos.TwirpServer
 }
 
-func NewServer(a *autocert.Manager, aC *auth.AuthController, aS protos.Auth, pS protos.Pod, adminS protos.Admin) *Server {
+func NewServer(aC *auth.AuthController, aS protos.Auth, pS protos.Pod, adminS protos.Admin) *Server {
 	s := &Server{authC: aC}
 	twirpServices := []TwirpService{
 		{

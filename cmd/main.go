@@ -20,7 +20,6 @@ import (
 
 	"github.com/sschwartz96/syncapod-backend/internal/handler"
 	"github.com/sschwartz96/syncapod-backend/internal/podcast"
-	"golang.org/x/crypto/acme/autocert"
 )
 
 func main() {
@@ -31,9 +30,6 @@ func main() {
 	if err != nil {
 		log.Fatal("Main() error, could not read config: ", err)
 	}
-
-	// manage certificate
-	certMan := createCertManager(cfg)
 
 	// setup context
 	ctx, cncFn := context.WithTimeout(context.Background(), time.Second*5)
@@ -73,13 +69,13 @@ func main() {
 	}
 	rssController := podcast.NewRSSController(podController)
 
-	// setup grpc services
+	// setup twirp services
 	gAuthService := twirp.NewAuthService(authController)
 	gPodService := twirp.NewPodcastService(podController)
 	gAdminService := twirp.NewAdminService(podController, rssController)
 
-	// setup & start gRPC server
-	grpcServer := twirp.NewServer(certMan,
+	// setup & start twirp server
+	twirpServer := twirp.NewServer(
 		authController,
 		gAuthService,
 		gPodService,
@@ -92,7 +88,7 @@ func main() {
 
 	go func() {
 		// start server
-		err = grpcServer.Start()
+		err = twirpServer.Start()
 		if err != nil {
 			log.Fatalf("main.twirp error starting server: %v", err)
 		}
@@ -128,23 +124,11 @@ func main() {
 
 	// start server
 	log.Println("starting server")
-	err = startServer(cfg, certMan, handler)
+	err = startServer(cfg, handler)
 	if err != nil {
 		log.Fatalf("server error: %v", err)
 	}
 
-}
-
-func createCertManager(cfg *config.Config) *autocert.Manager {
-	if cfg.Production {
-		return &autocert.Manager{
-			Prompt:     autocert.AcceptTOS,
-			Cache:      autocert.DirCache(cfg.CertDir),
-			HostPolicy: autocert.HostWhitelist("syncapod.com", "mail.syncapod.com", "www.syncapod.com", "45.79.25.193"),
-			Email:      "sam.schwartz96@gmail.com",
-		}
-	}
-	return nil
 }
 
 func updatePodcasts(rssController *podcast.RSSController) {
@@ -165,21 +149,6 @@ func readConfig(path string) (*config.Config, error) {
 	return config.ReadConfig(cfgFile)
 }
 
-func startServer(cfg *config.Config, a *autocert.Manager, h *handler.Handler) error {
-	// check if we are production
-	if cfg.Production {
-		// run http server to redirect traffic and handle cert renewal
-		go func() {
-			log.Fatal(http.ListenAndServe(":http", a.HTTPHandler(nil)))
-		}()
-		// create server
-		s := &http.Server{
-			Addr:      ":https",
-			TLSConfig: a.TLSConfig(),
-			Handler:   h,
-		}
-		return s.ListenAndServeTLS("", "")
-	} else {
-		return http.ListenAndServe(fmt.Sprintf(":%d", cfg.Port), h)
-	}
+func startServer(cfg *config.Config, h *handler.Handler) error {
+	return http.ListenAndServe(fmt.Sprintf(":%d", cfg.Port), h)
 }
