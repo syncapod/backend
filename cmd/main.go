@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/golang-migrate/migrate/v4"
@@ -17,43 +19,57 @@ import (
 	"github.com/sschwartz96/syncapod-backend/internal/config"
 	"github.com/sschwartz96/syncapod-backend/internal/db"
 	"github.com/sschwartz96/syncapod-backend/internal/twirp"
+	"github.com/sschwartz96/syncapod-backend/internal/util"
 
 	"github.com/sschwartz96/syncapod-backend/internal/handler"
 	"github.com/sschwartz96/syncapod-backend/internal/podcast"
 )
 
 func main() {
-	log.Println("Running syncapod")
+	slog.Info("Running syncapod")
 
+	// TODO: change to using environment variables
 	// read config
 	cfg, err := readConfig("config.json")
 	if err != nil {
-		log.Fatal("Main() error, could not read config: ", err)
+		slog.Error("main() error, could not read config: ", util.Err(err))
+		os.Exit(1)
 	}
+
+	// set up logger
+	var logHanlder slog.Handler
+	if cfg.Production {
+		logHanlder = slog.NewJSONHandler(os.Stdout, nil)
+	} else {
+		logHanlder = slog.NewTextHandler(os.Stdout, nil)
+	}
+	log := slog.New(logHanlder)
 
 	// setup context
 	ctx, cncFn := context.WithTimeout(context.Background(), time.Second*5)
 	defer cncFn()
 
 	// connect to db
-	log.Println("connecting to db")
+	log.Info("connecting to db")
 
 	pgURI := fmt.Sprintf("postgresql://%s:%s@%s:%d/%s?sslmode=disable",
 		cfg.DbUser, url.QueryEscape(cfg.DbPass), cfg.DbHost, cfg.DbPort, cfg.DbName)
-	log.Println("pgURI:", pgURI)
+	log.Debug("postgresql uri setup", slog.String("pgURI", strings.ReplaceAll(pgURI, fmt.Sprintf(":%s@", cfg.DbPass), ":<redacted@")))
 	pgdb, err := pgxpool.Connect(ctx, pgURI)
 	if err != nil {
-		log.Fatalf("couldn't connect to db: %v", err)
+		log.Error("couldn't connect to db", util.Err(err))
+		os.Exit(2)
 	}
 
 	// run migrations
 	mig, err := migrate.New("file://"+cfg.MigrationsDir, pgURI)
 	if err != nil {
-		log.Fatalf("couldn't create migrate struct : %v", err)
+		log.Error("could not create migrate struct", util.Err(err))
+		os.Exit(3)
 	}
 	err = mig.Up()
 	if err != nil && err.Error() != "no change" {
-		log.Fatalf("couldn't run migrations: %v", err)
+		log.Error("could not run migrations", util.Err(err))
 	}
 
 	// setup stores
@@ -65,7 +81,7 @@ func main() {
 	authController := auth.NewAuthController(authStore, oauthStore)
 	podController, err := podcast.NewPodController(podStore)
 	if err != nil {
-		log.Fatalf("main() error setting up pod controller: %v", err)
+		log.Error("error setting up pod controller", util.Err(err))
 	}
 	rssController := podcast.NewRSSController(podController)
 
@@ -83,50 +99,57 @@ func main() {
 	)
 
 	if err != nil {
-		log.Fatalf("failed to create grpc auth handler endpoint\n%v\n", err)
+		log.Error("failed to create grpc auth handler endpoint", util.Err(err))
+		os.Exit(4)
 	}
 
 	go func() {
 		// start server
 		err = twirpServer.Start()
+		// TODO: send this error through a channel and handle it on the main thread
 		if err != nil {
-			log.Fatalf("main.twirp error starting server: %v", err)
+			log.Error("error starting twirp server", util.Err(err))
+			os.Exit(5)
 		}
 	}()
 
 	// start updating podcasts
-	go updatePodcasts(rssController)
+	go func() {
+		updatePodcasts(rssController)
+	}()
 
-	log.Println("setting up handlers")
+	log.Info("setting up handlers")
 
 	// setup handler
 	handler, err := handler.CreateHandler(cfg, authController, podController)
 	if err != nil {
-		log.Fatal("could not setup handlers: ", err)
+		log.Error("could not setup handlers", util.Err(err))
+		os.Exit(6)
 	}
 
 	// debug TODO: remove
 	if cfg.Debug || true {
 		_, err := authController.CreateUser(context.Background(), "testUser@syncapod.com", "testUser", "testUser123!@#", time.Now())
 		if err != nil {
-			log.Printf("failed to create test user: %v\n", err)
+			log.Error("failed to create test user", util.Err(err))
 		}
 		r, err := podcast.DownloadRSS("https://feeds.twit.tv/twit.xml")
 		if err != nil {
-			log.Printf("failed to download debug podcast: %v\n", err)
+			log.Error("failed to download debug podcast", util.Err(err))
 		}
-		podID, err := rssController.AddNewPodcast("https://feeds.twit.tv/twit.xml", r)
+		pod, err := rssController.AddNewPodcast("https://feeds.twit.tv/twit.xml", r)
 		if err != nil {
-			log.Printf("failed to add debug podcast: %v\n", err)
+			log.Error("failed to add debug podcast", util.Err(err))
 		}
-		log.Println("podID:", podID)
+		log.Info("finished adding podcast", slog.String("podID", pod.ID.String()))
 	}
 
 	// start server
-	log.Println("starting server")
+	log.Info("starting server")
 	err = startServer(cfg, handler)
 	if err != nil {
-		log.Fatalf("server error: %v", err)
+		log.Error("server error", util.Err(err))
+		os.Exit(7)
 	}
 
 }
