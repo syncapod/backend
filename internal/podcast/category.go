@@ -12,13 +12,10 @@ import (
 )
 
 type CategoryCache struct {
-	// index represents id
-	dbCats []db.Category
-	// codes[key] = parentID; where key is generate by buildAncesterTree()
-	codes map[string]int
-	mutex sync.RWMutex
-	// necessary to add new unknown categories
-	podStore *db.PodcastStore
+	dbCats   []db.Category    // index represents id
+	codes    map[string]int   // codes[key] = parentID; where key is generate by buildAncesterTree()
+	mutex    sync.RWMutex     // allows CategoryCache to be thread safe
+	podStore *db.PodcastStore // necessary to add new unknown categories
 }
 
 func newCategoryCache(dbCats []db.Category, podStore *db.PodcastStore) *CategoryCache {
@@ -149,8 +146,10 @@ func catSort(c []Category) []Category {
 }
 
 // buildAncesterTree takes:
-//  pid: parent id
-//  s: cat name
+//
+//	pid: parent id
+//	s: cat name
+//
 // returns string in form of: etc->grandparent->parent->child(current)
 func (c *CategoryCache) buildAncesterTree(pid int, s string) string {
 	c.mutex.RLock()

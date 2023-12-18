@@ -5,8 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
-	"log"
+	"io"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -56,7 +55,7 @@ func CreateAlexaHandler(auth auth.Auth, podCon *podcast.PodController) *AlexaHan
 func (h *AlexaHandler) Alexa(res http.ResponseWriter, req *http.Request) {
 	var resText, directive string
 
-	body, err := ioutil.ReadAll(req.Body)
+	body, err := io.ReadAll(req.Body)
 	if err != nil {
 		fmt.Println("couldn't read the body of the request")
 		// TODO: proper response here
@@ -163,7 +162,7 @@ func (h *AlexaHandler) Alexa(res http.ResponseWriter, req *http.Request) {
 
 	case Pause:
 		audioTokens := strings.Split(aData.Context.AudioPlayer.Token, ";")
-		log.Println("audioplayer tkn:", aData.Context.AudioPlayer.Token)
+		// TODO: add debug logging: slog.Debug("audioplayer tkn:", aData.Context.AudioPlayer.Token)
 		if len(audioTokens) > 1 {
 			//podID := uuid.MustParse(audioTokens[1])
 			epiID := uuid.MustParse(audioTokens[2])

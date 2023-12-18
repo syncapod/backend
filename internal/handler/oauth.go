@@ -3,9 +3,8 @@ package handler
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
-	"io/ioutil"
-	"log"
+	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -13,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/sschwartz96/syncapod-backend/internal/auth"
+	"github.com/sschwartz96/syncapod-backend/internal/util"
 )
 
 // OauthHandler handles authorization and authentication to oauth clients
@@ -21,10 +21,11 @@ type OauthHandler struct {
 	loginTemplate  *template.Template
 	authTemplate   *template.Template
 	clients        map[string]string
+	log            *slog.Logger
 }
 
 // CreateOauthHandler just intantiates an OauthHandler
-func CreateOauthHandler(authController auth.Auth, clients map[string]string) (*OauthHandler, error) {
+func CreateOauthHandler(authController auth.Auth, clients map[string]string, log *slog.Logger) (*OauthHandler, error) {
 	loginT, err := template.ParseFiles("./templates/oauth/login.gohtml")
 	if err != nil {
 		return nil, err
@@ -38,6 +39,7 @@ func CreateOauthHandler(authController auth.Auth, clients map[string]string) (*O
 		loginTemplate:  loginT,
 		authTemplate:   authT,
 		clients:        clients,
+		log:            log,
 	}, nil
 }
 
@@ -59,15 +61,15 @@ func (h *OauthHandler) ServeHTTP(res http.ResponseWriter, req *http.Request) {
 func (h *OauthHandler) Login(res http.ResponseWriter, req *http.Request) {
 	if req.Method == http.MethodGet {
 		if err := h.loginTemplate.Execute(res, false); err != nil {
-			log.Printf("OauthHandler.Login() error executing loginTemplate: %v\n", err)
+			h.log.Error("oauth login error executing loginTemplate", util.Err(err))
 		}
 		return
 	}
 	err := req.ParseForm()
 	if err != nil {
-		fmt.Println("couldn't parse post values: ", err)
+		h.log.Debug("could not parse form values", util.Err(err))
 		if err := h.loginTemplate.Execute(res, true); err != nil {
-			log.Printf("OauthHandler.Login() error executing loginTemplate: %v\n", err)
+			h.log.Error("oauth login error executing loginTemplate", util.Err(err))
 		}
 		return
 	}
@@ -77,7 +79,7 @@ func (h *OauthHandler) Login(res http.ResponseWriter, req *http.Request) {
 	_, sesh, err := h.authController.Login(req.Context(), username, password, req.UserAgent())
 	if err != nil {
 		if err := h.loginTemplate.Execute(res, true); err != nil {
-			log.Printf("OauthHandler.Login() error executing loginTemplate: %v\n", err)
+			h.log.Error("oauth loging error executing loginTemplate", util.Err(err))
 		}
 		return
 	}
@@ -97,7 +99,7 @@ func (h *OauthHandler) Authorize(res http.ResponseWriter, req *http.Request) {
 	if req.Method == http.MethodGet {
 		err := h.authTemplate.Execute(res, nil)
 		if err != nil {
-			fmt.Println("OauthHandler.Authorize() error executing template:", err)
+			h.log.Error("oauth authorize error executing template", util.Err(err))
 		}
 		return
 	}
@@ -112,14 +114,14 @@ func (h *OauthHandler) Authorize(res http.ResponseWriter, req *http.Request) {
 	seshKey := strings.TrimSpace(req.URL.Query().Get("sesh_key"))
 	seshID, err := uuid.Parse(seshKey)
 	if err != nil {
-		fmt.Println("invalid session key: ", err)
+		h.log.Info("oauth authorize error invalid session key", util.Err(err))
 		values.Add("error", "invalid_request")
 		http.Redirect(res, req, redirectURI+"?"+values.Encode(), http.StatusNotFound)
 		return
 	}
 	user, err := h.authController.Authorize(req.Context(), seshID)
 	if err != nil {
-		fmt.Println("couldn't not validate, redirecting to login page: ", err)
+		h.log.Info("oauth authorize could not validate session id, redirecting to login page", util.Err(err))
 		values.Add("error", "access_denied")
 		http.Redirect(res, req, redirectURI+"?"+values.Encode(), http.StatusNotFound)
 		return
@@ -129,7 +131,7 @@ func (h *OauthHandler) Authorize(res http.ResponseWriter, req *http.Request) {
 	clientID := strings.TrimSpace(req.URL.Query().Get("client_id"))
 	authCode, err := h.authController.CreateAuthCode(req.Context(), user.ID, clientID)
 	if err != nil {
-		fmt.Printf("error creating oauth authorization code: %v\n", err)
+		h.log.Error("error creating oauth authorization code", util.Err(err))
 		values.Add("error", "server_error")
 		http.Redirect(res, req, redirectURI+"?"+values.Encode(), http.StatusNotFound)
 		return
@@ -147,18 +149,18 @@ func (h *OauthHandler) Token(res http.ResponseWriter, req *http.Request) {
 	// authenticate client as per RFC 6749 2.3.1.
 	id, secret, ok := req.BasicAuth()
 	if !ok {
-		log.Println("Oauth.Token() error getting client credentials from basic auth")
-		body, err := ioutil.ReadAll(req.Body)
+		h.log.Warn("oauth token error getting client credentials from basic auth")
+		body, err := io.ReadAll(req.Body)
 		if err == nil {
-			log.Println("here is the body of req:", string(body))
+			h.log.Debug("body of request:", slog.String("body", string(body)))
 		}
-		sendTokenError(res, "unauthorized_client")
+		sendTokenError(res, "unauthorized_client", h.log)
 		return
 	}
 	err := h.authenticateClient(id, secret)
 	if err != nil {
-		log.Println("Oauth.Token() error authenticating client")
-		sendTokenError(res, "unauthorized_client")
+		h.log.Warn("oauth token error authenticating client", util.Err(err))
+		sendTokenError(res, "unauthorized_client", h.log)
 		return
 	}
 
@@ -166,8 +168,8 @@ func (h *OauthHandler) Token(res http.ResponseWriter, req *http.Request) {
 	var queryCode string
 	// find grant type: refresh token else authorization code
 	if err := req.ParseForm(); err != nil {
-		fmt.Println("OAuth.Token() error parsing form:", err)
-		sendTokenError(res, "server_error")
+		h.log.Warn("oauth token error parsing form", util.Err(err))
+		sendTokenError(res, "server_error", h.log)
 		return
 	}
 	grantType := req.FormValue("grant_type")
@@ -176,30 +178,30 @@ func (h *OauthHandler) Token(res http.ResponseWriter, req *http.Request) {
 		refreshToken := req.FormValue("refresh_token")
 		accessToken, err := h.authController.ValidateRefreshToken(req.Context(), refreshToken)
 		if err != nil {
-			fmt.Println("OauthHandler.Token() couldn't find token based on refresh token: ", err)
-			sendTokenError(res, "invalid_grant")
+			h.log.Warn("oauth token could not find token based on refresh token", util.Err(err))
+			sendTokenError(res, "invalid_grant", h.log)
 			return
 		}
 		queryCode = auth.EncodeKey(accessToken.AuthCode)
 	case "authorization_code":
 		queryCode = req.FormValue("code")
 	default:
-		sendTokenError(res, "invalid_grant")
+		sendTokenError(res, "invalid_grant", h.log)
 		return
 	}
 
 	// validate auth code
 	authCode, err := h.authController.ValidateAuthCode(req.Context(), queryCode)
 	if err != nil {
-		fmt.Println("couldn't find auth code: ", err)
-		sendTokenError(res, "invalid_grant")
+		h.log.Warn("could not find auth code", util.Err(err))
+		sendTokenError(res, "invalid_grant", h.log)
 		return
 	}
 	// create access token
 	token, err := h.authController.CreateAccessToken(req.Context(), authCode)
 	if err != nil {
-		fmt.Println("error oauth handler(Token), could not create access token:", err)
-		sendTokenError(res, "invalid_request")
+		h.log.Error("error oauth handler(Token), could not create access token", util.Err(err))
+		sendTokenError(res, "invalid_request", h.log)
 		return
 	}
 	// setup json
@@ -216,16 +218,16 @@ func (h *OauthHandler) Token(res http.ResponseWriter, req *http.Request) {
 	// marshal data and send off
 	json, err := json.Marshal(&tRes)
 	if err != nil {
-		fmt.Println("OAuth.Token() error masrhalling json:", err)
+		h.log.Error("oauth token error marshalling json", util.Err(err))
 		// TODO: not technically a token request error message, but this shouldn't happen
-		sendTokenError(res, "server_error")
+		sendTokenError(res, "server_error", h.log)
 		return
 	}
 	res.Header().Set("Content-Type", "application/json")
 	res.Header().Set("Cache-Control", "no-store")
 	res.Header().Set("Pragma", "no-cache")
 	if _, err = res.Write(json); err != nil {
-		log.Printf("OauthHandler.Token() error writing response: %v", err)
+		h.log.Error("oauth token error writing response", util.Err(err))
 	}
 }
 
@@ -238,7 +240,7 @@ func (h *OauthHandler) authenticateClient(id, secret string) error {
 	return errors.New("Oauth.authenticateClient() no matching credentials")
 }
 
-func sendTokenError(res http.ResponseWriter, err string) {
+func sendTokenError(res http.ResponseWriter, err string, log *slog.Logger) {
 	type tokenErrorResponse struct {
 		Error string `json:"error"`
 	}
@@ -246,6 +248,6 @@ func sendTokenError(res http.ResponseWriter, err string) {
 	errResJson, _ := json.Marshal(errRes)
 	res.WriteHeader(http.StatusBadRequest)
 	if _, err := res.Write(errResJson); err != nil {
-		log.Printf("OauthHandler.Token() error writing response: %v", err)
+		log.Error("oauth send token error writing response", util.Err(err))
 	}
 }

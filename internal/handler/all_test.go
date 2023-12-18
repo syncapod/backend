@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http/httptest"
@@ -183,7 +184,8 @@ func setup(pg *pgxpool.Pool) {
 func insertUser(a *db.AuthStorePG, u *db.UserRow) {
 	err := a.InsertUser(context.Background(), u)
 	if err != nil {
-		log.Println("insertUser() id:", u.ID)
-		log.Fatalln("insertUser() error:", err)
+		fmt.Println("insertUser() id:", u.ID)
+		fmt.Println("insertUser() error:", err)
+		os.Exit(1)
 	}
 }

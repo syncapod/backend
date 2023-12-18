@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -15,14 +15,19 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/sschwartz96/syncapod-backend/internal/db"
+	"github.com/sschwartz96/syncapod-backend/internal/util"
 )
 
 type RSSController struct {
 	podController *PodController
+	log           *slog.Logger
 }
 
-func NewRSSController(podController *PodController) *RSSController {
-	return &RSSController{podController: podController}
+func NewRSSController(podController *PodController, log *slog.Logger) *RSSController {
+	return &RSSController{
+		podController: podController,
+		log:           log,
+	}
 }
 
 var tzMap = map[string]string{
@@ -47,12 +52,12 @@ func (c *RSSController) UpdatePodcasts() error {
 			pod := &podcasts[i]
 			wg.Add(1)
 			go func() {
-				log.Println("starting updatePodcast():", pod.Title)
+				c.log.Info("starting UpdatePodcast()", slog.String("podcast title", pod.Title))
 				err = c.updatePodcast(pod)
 				if err != nil {
-					fmt.Printf("UpdatePodcasts() error updating podcast %v, error = %v\n", pod, err)
+					c.log.Error("UpdatePodcasts() error updating podcast", slog.Any("podcast", pod), util.Err(err))
 				}
-				log.Println("finished updatePodcast():", pod.Title)
+				c.log.Info("finished updatePodcast():", slog.String("podcast title", pod.Title))
 				wg.Done()
 			}()
 		}
@@ -75,7 +80,7 @@ func (c *RSSController) updatePodcast(pod *db.Podcast) error {
 	defer func() {
 		err := rssResp.Close()
 		if err != nil {
-			log.Println("updatePodcast() error closing rss response:", err)
+			c.log.Error("updatePodcast() error closing rss response:", util.Err(err))
 		}
 	}()
 	// parse rss from respone.Body
@@ -85,7 +90,7 @@ func (c *RSSController) updatePodcast(pod *db.Podcast) error {
 	}
 
 	for e := range newPod.Channel.Items {
-		epi := rssItemToDBEpisode(&newPod.Channel.Items[e], pod.ID)
+		epi := rssItemToDBEpisode(&newPod.Channel.Items[e], pod.ID, c.log)
 		// check if the latest episode is in collection
 		exists := c.podController.DoesEpisodeExist(context.Background(), pod.ID, epi.EnclosureURL)
 		if !exists {
@@ -126,10 +131,10 @@ func (c *RSSController) AddNewPodcast(url string, r io.Reader) (*db.Podcast, err
 
 	// loop through episodes and save them
 	for i := range rssPod.Channel.Items {
-		epi := rssItemToDBEpisode(&rssPod.Channel.Items[i], pod.ID)
+		epi := rssItemToDBEpisode(&rssPod.Channel.Items[i], pod.ID, c.log)
 		err = c.podController.InsertEpisode(context.Background(), epi)
 		if err != nil {
-			log.Println("AddNewPodcast() couldn't insert episode: ", err)
+			c.log.Error("AddNewPodcast() couldn't insert episode: ", util.Err(err))
 		}
 	}
 	return pod, nil
@@ -191,7 +196,7 @@ func parseRFC2822ToUTC(s string) (*time.Time, error) {
 	return &t, nil
 }
 
-//parseDuration takes in the string duration and returns the duration in millis
+// parseDuration takes in the string duration and returns the duration in millis
 func parseDuration(d string) (int64, error) {
 	if d == "" {
 		return 0, fmt.Errorf("parseDuration() error empty duration string")
@@ -291,7 +296,7 @@ type Category struct {
 func (c *RSSController) rssChannelToPodcast(r *rssChannel, id uuid.UUID, rssURL string) (*db.Podcast, error) {
 	pubDate, err := parseRFC2822ToUTC(r.PubDate)
 	if err != nil {
-		log.Println("rssChannelToPodcast() error converting pubdate:", err)
+		c.log.Error("rssChannelToPodcast() error converting pubdate:", util.Err(err))
 	}
 	cats, err := c.podController.catCache.TranslateCategories(r.Categories)
 	if err != nil {
@@ -320,18 +325,18 @@ func (c *RSSController) rssChannelToPodcast(r *rssChannel, id uuid.UUID, rssURL 
 	}, nil
 }
 
-func rssItemToDBEpisode(r *rssItem, podID uuid.UUID) *db.Episode {
+func rssItemToDBEpisode(r *rssItem, podID uuid.UUID, log *slog.Logger) *db.Episode {
 	enclosureLen, err := strconv.ParseInt(r.Enclosure.Length, 10, 64)
 	if err != nil {
-		log.Println("rssItemToDBEpisode() error parsing enclosure length:", err)
+		log.Error("rssItemToDBEpisode() error parsing enclosure length:", util.Err(err))
 	}
 	pubDate, err := parseRFC2822ToUTC(r.PubDate)
 	if err != nil {
-		log.Println("rssItemToDBEpisode() error converting pubdate:", err)
+		log.Error("rssItemToDBEpisode() error converting pubdate:", util.Err(err))
 	}
 	duration, err := parseDuration(r.Duration)
 	if err != nil {
-		log.Println("rssItemToDBEpisode() error parsing duration:", err)
+		log.Error("rssItemToDBEpisode() error parsing duration:", util.Err(err))
 	}
 	episode, _ := strconv.Atoi(r.Episode)
 	season, _ := strconv.Atoi(r.Season)

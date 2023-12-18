@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -83,7 +82,7 @@ func main() {
 	if err != nil {
 		log.Error("error setting up pod controller", util.Err(err))
 	}
-	rssController := podcast.NewRSSController(podController)
+	rssController := podcast.NewRSSController(podController, log)
 
 	// setup twirp services
 	gAuthService := twirp.NewAuthService(authController)
@@ -115,13 +114,19 @@ func main() {
 
 	// start updating podcasts
 	go func() {
-		updatePodcasts(rssController)
+		for {
+			err := rssController.UpdatePodcasts()
+			if err != nil {
+				log.Error("main/updatePodcasts() error:", util.Err(err))
+			}
+			time.Sleep(time.Minute * 15)
+		}
 	}()
 
 	log.Info("setting up handlers")
 
 	// setup handler
-	handler, err := handler.CreateHandler(cfg, authController, podController)
+	handler, err := handler.CreateHandler(cfg, authController, podController, log)
 	if err != nil {
 		log.Error("could not setup handlers", util.Err(err))
 		os.Exit(6)
@@ -152,16 +157,6 @@ func main() {
 		os.Exit(7)
 	}
 
-}
-
-func updatePodcasts(rssController *podcast.RSSController) {
-	for {
-		err := rssController.UpdatePodcasts()
-		if err != nil {
-			log.Println("main/updatePodcasts() error:", err)
-		}
-		time.Sleep(time.Minute * 15)
-	}
 }
 
 func readConfig(path string) (*config.Config, error) {
