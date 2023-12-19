@@ -3,14 +3,13 @@ package twirp
 import (
 	"context"
 	"fmt"
-	"log"
 
-	"github.com/golang/protobuf/ptypes"
 	"github.com/google/uuid"
 	"github.com/sschwartz96/syncapod-backend/internal/db"
 	protos "github.com/sschwartz96/syncapod-backend/internal/gen"
 	"github.com/sschwartz96/syncapod-backend/internal/podcast"
 	"github.com/twitchtv/twirp"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // PodcastService is the gRPC service for podcast
@@ -85,7 +84,7 @@ func (p *PodcastService) UpsertUserEpisode(ctx context.Context, userEpiReq *prot
 		return nil, twirp.InvalidArgument.Error("Could not parse episode UUID")
 	}
 	if userEpiReq.LastSeen == nil {
-		userEpiReq.LastSeen = ptypes.TimestampNow()
+		userEpiReq.LastSeen = timestamppb.Now()
 	}
 	userEpi := &db.UserEpisode{
 		UserID:       userID,
@@ -109,7 +108,7 @@ func (p *PodcastService) GetSubscriptions(ctx context.Context, req *protos.GetSu
 	}
 	subs, err := p.podCon.FindSubscriptions(ctx, userID)
 	if err != nil {
-		log.Println("GetSubscriptions() error getting subs:", err)
+		// TODO: 2023-12-18 understand and handle this error
 		return &protos.Subscriptions{}, nil
 	}
 

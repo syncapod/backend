@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"testing"
@@ -58,9 +59,9 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		log.Fatalf("twirp.TestMain() error setting up PodController: %v", err)
 	}
-	rssController := podcast.NewRSSController(podController)
+	rssController := podcast.NewRSSController(podController, slog.Default())
 
-	twirpServer := NewServer(nil, authController,
+	twirpServer := NewServer(authController,
 		NewAuthService(authController), NewPodcastService(podController),
 		NewAdminService(podController, rssController),
 	)

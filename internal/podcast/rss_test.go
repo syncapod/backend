@@ -2,6 +2,7 @@ package podcast
 
 import (
 	"context"
+	"log/slog"
 	"reflect"
 	"testing"
 	"time"
@@ -16,7 +17,7 @@ func Test_RSS(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Test_RSS error setting up: %v", err)
 	}
-	rssController := NewRSSController(podController)
+	rssController := NewRSSController(podController, slog.Default())
 	//rssURL := "https://changelog.com/gotime/feed"
 	rssURL := "https://feeds.twit.tv/twit.xml"
 
@@ -89,6 +90,7 @@ func Test_parseDuration(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			got, err := parseDuration(tt.args.d)
@@ -131,6 +133,7 @@ func Test_parseRFC2822(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			got, err := parseRFC2822ToUTC(tt.args.s)

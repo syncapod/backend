@@ -2,7 +2,6 @@ package twirp
 
 import (
 	"context"
-	"log"
 	"net/http"
 
 	protos "github.com/sschwartz96/syncapod-backend/internal/gen"
@@ -34,7 +33,6 @@ func (a *AdminService) AddPodcast(ctx context.Context, req *protos.AddPodReq) (*
 	if err != nil {
 		return nil, status.Error(codes.Internal, "error AddNewPodcast(): "+err.Error())
 	}
-	log.Println("podcast cats:", pod.Category)
 	protoPod, err := convertPodFromDB(pod, a.podCon)
 	if err != nil {
 		return nil, status.Error(codes.Internal, "error converting db pod to proto pod: "+err.Error())

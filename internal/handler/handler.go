@@ -3,7 +3,6 @@ package handler
 import (
 	"fmt"
 	"io"
-	"log"
 	"log/slog"
 	"net/http"
 	"path"
@@ -12,12 +11,14 @@ import (
 	"github.com/sschwartz96/syncapod-backend/internal/auth"
 	"github.com/sschwartz96/syncapod-backend/internal/config"
 	"github.com/sschwartz96/syncapod-backend/internal/podcast"
+	"github.com/sschwartz96/syncapod-backend/internal/util"
 )
 
 // Handler is the main handler for syncapod, all routes go through it
 type Handler struct {
 	oauthHandler *OauthHandler
 	alexaHandler *AlexaHandler
+	log          *slog.Logger
 }
 
 // CreateHandler sets up the main handler
@@ -33,8 +34,8 @@ func CreateHandler(cfg *config.Config, authC auth.Auth, podCon *podcast.PodContr
 	if err != nil {
 		return nil, fmt.Errorf("CreateHandler() error creating oauthHandler: %v", err)
 	}
-	alexaHandler := CreateAlexaHandler(authC, podCon)
-	return &Handler{oauthHandler: oauthHandler, alexaHandler: alexaHandler}, nil
+	alexaHandler := CreateAlexaHandler(authC, podCon, log)
+	return &Handler{oauthHandler: oauthHandler, alexaHandler: alexaHandler, log: log}, nil
 }
 
 // ServeHTTP handles all requests
@@ -74,8 +75,13 @@ func (h *Handler) serveAPI(res http.ResponseWriter, req *http.Request) {
 	case "alexa":
 		h.alexaHandler.Alexa(res, req)
 	case "actions":
-		log.Println("actions req")
-		log.Println(io.ReadAll(req.Body))
+		body, err := io.ReadAll(req.Body)
+		if err != nil {
+			h.log.Debug("actions request, could not read request body", util.Err(err))
+			return
+		}
+
+		h.log.Info("actions request", slog.String("body", string(body)))
 	}
 }
 
