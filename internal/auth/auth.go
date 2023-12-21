@@ -3,12 +3,13 @@ package auth
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/sschwartz96/syncapod-backend/internal/db"
+	"github.com/sschwartz96/syncapod-backend/internal/util"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -29,6 +30,7 @@ type Auth interface {
 type AuthController struct {
 	authStore  db.AuthStore
 	oauthStore db.OAuthStore
+	log        *slog.Logger
 }
 
 func NewAuthController(aStore db.AuthStore, oStore db.OAuthStore) *AuthController {
@@ -67,7 +69,7 @@ func (a *AuthController) Authorize(ctx context.Context, sessionID uuid.UUID) (*d
 		go func() {
 			err := a.authStore.DeleteSession(context.Background(), sessionID)
 			if err != nil {
-				log.Printf("AuthController.Authorize() error deleting session: %v\n", err)
+				a.log.Warn("error deleting sesion", util.Err(err))
 			}
 		}()
 		return nil, fmt.Errorf("AuthController.Authorize() error: session expired")
@@ -77,7 +79,7 @@ func (a *AuthController) Authorize(ctx context.Context, sessionID uuid.UUID) (*d
 	go func() {
 		err := a.authStore.UpdateSession(context.Background(), session)
 		if err != nil {
-			log.Printf("AuthController.Authorize() error updating session: %v\n", err)
+			a.log.Warn("error updating session", util.Err(err))
 		}
 	}()
 	user.PasswordHash = []byte{}
@@ -126,7 +128,6 @@ func (a *AuthController) findUserByEmailOrUsername(ctx context.Context, u string
 func hash(password string) ([]byte, error) {
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.MinCost)
 	if err != nil {
-		fmt.Printf("Hash(), error hashing password: %v", err)
 		return nil, err
 	}
 	return hash, nil

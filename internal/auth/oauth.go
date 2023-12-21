@@ -6,11 +6,11 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/sschwartz96/syncapod-backend/internal/db"
+	"github.com/sschwartz96/syncapod-backend/internal/util"
 )
 
 // CreateAuthCode creates and saves an authorization code with the client & user id
@@ -106,7 +106,7 @@ func (a *AuthController) ValidateRefreshToken(ctx context.Context, token string)
 	go func() {
 		err = a.oauthStore.DeleteAccessToken(ctx, accesTkn.Token)
 		if err != nil {
-			log.Printf("AuthController.ValidateRefreshToken error deleting access token: %v\n", err)
+			a.log.Warn("error deleting access token", util.Err(err))
 		}
 	}()
 	return accesTkn, nil
