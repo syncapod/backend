@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/sschwartz96/syncapod-backend/internal/db"
+	"github.com/sschwartz96/syncapod-backend/internal/db_new"
 	"github.com/sschwartz96/syncapod-backend/internal/util"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -18,7 +19,7 @@ type Auth interface {
 	Login(ctx context.Context, username, password, agent string) (*db.UserRow, *db.SessionRow, error)
 	Authorize(ctx context.Context, sessionID uuid.UUID) (*db.UserRow, error)
 	Logout(ctx context.Context, sessionID uuid.UUID) error
-	CreateUser(ctx context.Context, email, username, pwd string, dob time.Time) (*db.UserRow, error)
+	CreateUser(ctx context.Context, email, username, pwd string, dob time.Time) (*db_new.InsertUserParams, error)
 	// OAuth
 	CreateAuthCode(ctx context.Context, userID uuid.UUID, clientID string) (*db.AuthCodeRow, error)
 	CreateAccessToken(ctx context.Context, authCode *db.AuthCodeRow) (*db.AccessTokenRow, error)
@@ -30,6 +31,7 @@ type Auth interface {
 type AuthController struct {
 	authStore  db.AuthStore
 	oauthStore db.OAuthStore
+	queries    *db_new.Queries
 	log        *slog.Logger
 }
 
@@ -93,18 +95,32 @@ func (a *AuthController) Logout(ctx context.Context, sessionID uuid.UUID) error 
 	}
 	return nil
 }
-func (a *AuthController) CreateUser(ctx context.Context, email, username, pwd string, dob time.Time) (*db.UserRow, error) {
+func (a *AuthController) CreateUser(ctx context.Context, email, username, pwd string, dob time.Time) (*db_new.InsertUserParams, error) {
 	pwdHash, err := hash(pwd)
 	if err != nil {
 		return nil, fmt.Errorf("AuthController.CreateUser() error hashing password: %v", err)
 	}
 
-	newUser := &db.UserRow{ID: uuid.New(), Email: email, Username: username, Birthdate: dob, PasswordHash: pwdHash, Created: time.Now(), LastSeen: time.Now()}
-	err = a.authStore.InsertUser(ctx, newUser)
+	newUUID, err := util.PGUUID()
+	if err != nil {
+		return nil, fmt.Errorf("AuthController.CreateUser() error generating new UUID: %v", err)
+	}
+
+	newUser := db_new.InsertUserParams{
+		ID:           newUUID,
+		Email:        email,
+		Username:     username,
+		Birthdate:    util.PGDateFromTime(dob),
+		PasswordHash: pwdHash,
+		Created:      util.PGNow(),
+		LastSeen:     util.PGNow(),
+	}
+	fmt.Println("uuid", slog.Any("user", newUser))
+	err = a.queries.InsertUser(ctx, newUser)
 	if err != nil {
 		return nil, fmt.Errorf("AuthController.CreateUser() error inserting user into db: %v", err)
 	}
-	return newUser, nil
+	return &newUser, nil
 }
 
 // findUserByEmailOrUsername is a helper method for login

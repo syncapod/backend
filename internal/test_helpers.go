@@ -9,7 +9,7 @@ import (
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
-	"github.com/jackc/pgx/v4/pgxpool"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/ory/dockertest/v3"
 )
 
@@ -38,7 +38,7 @@ func StartDockerDB(name string) (*pgxpool.Pool, func() error, error) {
 			"postgres://postgres:secret@localhost:%s/postgres?sslmode=disable",
 			resource.GetPort("5432/tcp"),
 		)
-		pgxPool, err = pgxpool.Connect(context.Background(), pgURI)
+		pgxPool, err = pgxpool.New(context.Background(), pgURI)
 		if err != nil {
 			return err
 		}

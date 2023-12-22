@@ -49,3 +49,9 @@ grpc-gateway:
 		--grpc-gateway_opt logtostderr=true \
 		--grpc-gateway_opt generate_unbound_methods=true \
 		$(PROTO_DIR)*
+
+sqlc_generate:
+	sqlc generate
+
+sqlc_vet:
+	sqlc vet

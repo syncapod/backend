@@ -13,10 +13,11 @@ import (
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
-	"github.com/jackc/pgx/v4/pgxpool"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/sschwartz96/syncapod-backend/internal/auth"
 	"github.com/sschwartz96/syncapod-backend/internal/config"
 	"github.com/sschwartz96/syncapod-backend/internal/db"
+	"github.com/sschwartz96/syncapod-backend/internal/db_new"
 	"github.com/sschwartz96/syncapod-backend/internal/twirp"
 	"github.com/sschwartz96/syncapod-backend/internal/util"
 
@@ -53,12 +54,15 @@ func main() {
 
 	pgURI := fmt.Sprintf("postgresql://%s:%s@%s:%d/%s?sslmode=disable",
 		cfg.DbUser, url.QueryEscape(cfg.DbPass), cfg.DbHost, cfg.DbPort, cfg.DbName)
-	log.Debug("postgresql uri setup", slog.String("pgURI", strings.ReplaceAll(pgURI, fmt.Sprintf(":%s@", cfg.DbPass), ":<redacted@")))
-	pgdb, err := pgxpool.Connect(ctx, pgURI)
+	logSafeURI := strings.ReplaceAll(pgURI, fmt.Sprintf(":%s@", cfg.DbPass), ":<redacted@")
+	log.Debug("postgresql uri setup", slog.String("pgURI", logSafeURI))
+	pgdb, err := pgxpool.New(ctx, pgURI)
 	if err != nil {
-		log.Error("couldn't connect to db", util.Err(err))
+		log.Error("could not create new db connection with pgxpool", slog.String("pgURI", logSafeURI), util.Err(err))
 		os.Exit(2)
 	}
+
+	queries := db_new.New(pgdb)
 
 	// run migrations
 	mig, err := migrate.New("file://"+cfg.MigrationsDir, pgURI)

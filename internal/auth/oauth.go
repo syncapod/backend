@@ -99,16 +99,16 @@ func (a *AuthController) ValidateRefreshToken(ctx context.Context, token string)
 	if err != nil {
 		return nil, fmt.Errorf("AuthController.ValidateRefreshToken() error decoding key: %v", err)
 	}
+
 	accesTkn, err := a.oauthStore.GetAccessTokenByRefresh(ctx, decodedTkn)
 	if err != nil {
 		return nil, fmt.Errorf("AuthController.ValidateRefreshToken() error finding access token: %v", err)
 	}
-	go func() {
-		err = a.oauthStore.DeleteAccessToken(ctx, accesTkn.Token)
-		if err != nil {
-			a.log.Warn("error deleting access token", util.Err(err))
-		}
-	}()
+
+	err = a.oauthStore.DeleteAccessToken(ctx, accesTkn.Token)
+	if err != nil {
+		a.log.Warn("error deleting access token", util.Err(err))
+	}
 	return accesTkn, nil
 }
 

@@ -3,15 +3,17 @@ package auth
 import (
 	"context"
 	"log"
+	"log/slog"
 	"os"
 	"reflect"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v4/pgxpool"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/sschwartz96/syncapod-backend/internal"
 	"github.com/sschwartz96/syncapod-backend/internal/db"
+	"github.com/sschwartz96/syncapod-backend/internal/db_new"
 	"github.com/stretchr/testify/require"
 )
 
@@ -19,6 +21,7 @@ var (
 	dbpg        *pgxpool.Pool
 	authStore   db.AuthStore
 	oauthStore  db.OAuthStore
+	queries     *db_new.Queries
 	getTestUser = &db.UserRow{ID: uuid.MustParse("a813c6e3-9cd0-4aed-9c4e-1d88ae20c8ba"), Email: "get@test.auth", Username: "getTestAuth", Birthdate: time.Unix(0, 0).UTC()}
 )
 
@@ -37,6 +40,7 @@ func TestMain(m *testing.M) {
 	// setup store
 	authStore = db.NewAuthStorePG(dbpg)
 	oauthStore = db.NewOAuthStorePG(dbpg)
+	queries = db_new.New(dbpg)
 
 	// run tests
 	runCode := m.Run()
@@ -188,6 +192,8 @@ func TestAuthController_CreateUser(t *testing.T) {
 	a := &AuthController{
 		authStore:  authStore,
 		oauthStore: oauthStore,
+		queries:    queries,
+		log:        slog.Default(),
 	}
 	email, username, pwd := "testCreateUser@syncapod.com", "testCreateUser", "secret"
 	u, err := a.CreateUser(context.Background(), email, username, pwd, time.Now())
