@@ -14,15 +14,22 @@ import (
 	"github.com/sschwartz96/syncapod-backend/internal"
 	"github.com/sschwartz96/syncapod-backend/internal/db"
 	"github.com/sschwartz96/syncapod-backend/internal/db_new"
+	"github.com/sschwartz96/syncapod-backend/internal/util"
 	"github.com/stretchr/testify/require"
 )
 
 var (
 	dbpg        *pgxpool.Pool
-	authStore   db.AuthStore
 	oauthStore  db.OAuthStore
 	queries     *db_new.Queries
-	getTestUser = &db.UserRow{ID: uuid.MustParse("a813c6e3-9cd0-4aed-9c4e-1d88ae20c8ba"), Email: "get@test.auth", Username: "getTestAuth", Birthdate: time.Unix(0, 0).UTC()}
+	getTestUser = db_new.User{
+		ID:        util.PGUUID(uuid.MustParse("a813c6e3-9cd0-4aed-9c4e-1d88ae20c8ba")),
+		Email:     "get@test.auth",
+		Created:   util.PGNow(),
+		LastSeen:  util.PGNow(),
+		Username:  "getTestAuth",
+		Birthdate: util.PGDateFromTime(time.Unix(0, 0).UTC()),
+	}
 )
 
 // user TestMain to setup
@@ -34,13 +41,12 @@ func TestMain(m *testing.M) {
 		log.Fatalf("auth.TestMain() error setting up docker db: %v", err)
 	}
 
-	// setup db
-	setupAuthDB()
-
 	// setup store
-	authStore = db.NewAuthStorePG(dbpg)
 	oauthStore = db.NewOAuthStorePG(dbpg)
 	queries = db_new.New(dbpg)
+
+	// setup db
+	setupAuthDB()
 
 	// run tests
 	runCode := m.Run()
@@ -56,8 +62,8 @@ func TestMain(m *testing.M) {
 
 func TestAuthController_Login(t *testing.T) {
 	type fields struct {
-		authStore  db.AuthStore
 		oauthStore db.OAuthStore
+		queries    *db_new.Queries
 	}
 	type args struct {
 		ctx      context.Context
@@ -69,7 +75,7 @@ func TestAuthController_Login(t *testing.T) {
 		name    string
 		fields  fields
 		args    args
-		want    *db.UserRow
+		want    db_new.User
 		wantErr bool
 	}{
 		{
@@ -79,7 +85,7 @@ func TestAuthController_Login(t *testing.T) {
 				password: "pass",
 				username: getTestUser.Username,
 			},
-			fields:  fields{authStore: authStore, oauthStore: oauthStore},
+			fields:  fields{oauthStore: oauthStore, queries: queries},
 			want:    getTestUser,
 			wantErr: false,
 		},
@@ -87,8 +93,8 @@ func TestAuthController_Login(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			a := &AuthController{
-				authStore:  tt.fields.authStore,
 				oauthStore: tt.fields.oauthStore,
+				queries:    tt.fields.queries,
 			}
 			got, got1, err := a.Login(tt.args.ctx, tt.args.username, tt.args.password, tt.args.agent)
 			if (err != nil) != tt.wantErr {
@@ -98,7 +104,7 @@ func TestAuthController_Login(t *testing.T) {
 			if !reflect.DeepEqual(got.ID, tt.want.ID) {
 				t.Errorf("AuthController.Login() got = \n%v\n, want \n%v", got, tt.want)
 			}
-			_, err = a.authStore.GetSession(context.Background(), got1.ID)
+			_, err = a.queries.GetSession(context.Background(), got1.ID)
 			if err != nil {
 				t.Error("AuthController.Login() did not find session in database")
 			}
@@ -108,8 +114,8 @@ func TestAuthController_Login(t *testing.T) {
 
 func TestAuthController_Authorize(t *testing.T) {
 	type fields struct {
-		authStore  db.AuthStore
 		oauthStore db.OAuthStore
+		queries    *db_new.Queries
 	}
 	type args struct {
 		ctx       context.Context
@@ -119,13 +125,13 @@ func TestAuthController_Authorize(t *testing.T) {
 		name    string
 		fields  fields
 		args    args
-		want    *db.UserRow
+		want    db_new.User
 		wantErr bool
 	}{
 		{
 			name:    "valid",
 			args:    args{ctx: context.Background(), sessionID: uuid.MustParse("a813c6e3-9cd0-4aed-9c4e-1d87ae20c111")},
-			fields:  fields{authStore: authStore, oauthStore: oauthStore},
+			fields:  fields{oauthStore: oauthStore, queries: queries},
 			want:    getTestUser,
 			wantErr: false,
 		},
@@ -133,8 +139,8 @@ func TestAuthController_Authorize(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			a := &AuthController{
-				authStore:  tt.fields.authStore,
 				oauthStore: tt.fields.oauthStore,
+				queries:    tt.fields.queries,
 			}
 			got, err := a.Authorize(tt.args.ctx, tt.args.sessionID)
 			if (err != nil) != tt.wantErr {
@@ -150,8 +156,8 @@ func TestAuthController_Authorize(t *testing.T) {
 
 func TestAuthController_Logout(t *testing.T) {
 	type fields struct {
-		authStore  db.AuthStore
 		oauthStore db.OAuthStore
+		queries    *db_new.Queries
 	}
 	type args struct {
 		ctx       context.Context
@@ -166,21 +172,21 @@ func TestAuthController_Logout(t *testing.T) {
 		{
 			name:    "valid",
 			args:    args{ctx: context.Background(), sessionID: uuid.MustParse("a813c6e3-9cd0-4aed-9c4e-1d87ae20c222")},
-			fields:  fields{authStore: authStore, oauthStore: oauthStore},
+			fields:  fields{oauthStore: oauthStore, queries: queries},
 			wantErr: false,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			a := &AuthController{
-				authStore:  tt.fields.authStore,
 				oauthStore: tt.fields.oauthStore,
+				queries:    queries,
 			}
 			if err := a.Logout(tt.args.ctx, tt.args.sessionID); (err != nil) != tt.wantErr {
 				t.Errorf("AuthController.Logout() error = %v, wantErr %v", err, tt.wantErr)
 			}
 			// make sure session is removed
-			_, err := authStore.GetSession(context.Background(), tt.args.sessionID)
+			_, err := queries.GetSession(context.Background(), util.PGUUID(tt.args.sessionID))
 			if err == nil {
 				t.Errorf("AuthController.Logout() session still found within database")
 			}
@@ -190,7 +196,6 @@ func TestAuthController_Logout(t *testing.T) {
 
 func TestAuthController_CreateUser(t *testing.T) {
 	a := &AuthController{
-		authStore:  authStore,
 		oauthStore: oauthStore,
 		queries:    queries,
 		log:        slog.Default(),
@@ -203,8 +208,8 @@ func TestAuthController_CreateUser(t *testing.T) {
 
 func TestAuthController_findUserByEmailOrUsername(t *testing.T) {
 	type fields struct {
-		authStore  db.AuthStore
 		oauthStore db.OAuthStore
+		queries    *db_new.Queries
 	}
 	type args struct {
 		ctx context.Context
@@ -214,20 +219,20 @@ func TestAuthController_findUserByEmailOrUsername(t *testing.T) {
 		name    string
 		fields  fields
 		args    args
-		want    *db.UserRow
+		want    db_new.User
 		wantErr bool
 	}{
 		{
 			name:    "valid",
 			args:    args{ctx: context.Background(), u: getTestUser.Username},
-			fields:  fields{authStore: authStore, oauthStore: oauthStore},
+			fields:  fields{oauthStore: oauthStore, queries: queries},
 			want:    getTestUser,
 			wantErr: false,
 		},
 		{
 			name:    "valid",
 			args:    args{ctx: context.Background(), u: getTestUser.Email},
-			fields:  fields{authStore: authStore, oauthStore: oauthStore},
+			fields:  fields{oauthStore: oauthStore, queries: queries},
 			want:    getTestUser,
 			wantErr: false,
 		},
@@ -235,8 +240,8 @@ func TestAuthController_findUserByEmailOrUsername(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			a := &AuthController{
-				authStore:  tt.fields.authStore,
 				oauthStore: tt.fields.oauthStore,
+				queries:    tt.fields.queries,
 			}
 			got, err := a.findUserByEmailOrUsername(tt.args.ctx, tt.args.u)
 			if (err != nil) != tt.wantErr {
@@ -251,29 +256,54 @@ func TestAuthController_findUserByEmailOrUsername(t *testing.T) {
 }
 
 func setupAuthDB() {
-	a := db.NewAuthStorePG(dbpg)
 	// test users
 	getTestUser.PasswordHash = []byte("$2a$10$rUH2xp2xIt3ASkdpvH7duugL//F.HsqP58DKvcAAnTmXRWM0fSiRS")
-	insertUser(a, getTestUser)
+	insertUser(queries, db_new.InsertUserParams(getTestUser))
 	getTestUser.PasswordHash = nil
 
-	updateUser := &db.UserRow{ID: uuid.MustParse("b813c6e3-9cd0-4aed-9c4e-1d88ae20c8ba"), Email: "update@test.auth", Username: "updateAuth", Birthdate: time.Unix(10001, 0).UTC(), PasswordHash: []byte("pass")}
-	insertUser(a, updateUser)
-	updatePassUser := &db.UserRow{ID: uuid.MustParse("c813c6e3-9cd0-4aed-9c4e-1d88ae20c8ba"), Email: "updatePass@test.auth", Username: "updatePassAuth", Birthdate: time.Unix(10002, 0).UTC(), PasswordHash: []byte("pass")}
-	insertUser(a, updatePassUser)
-	deleteUser := &db.UserRow{ID: uuid.MustParse("d813c6e3-9cd0-4aed-9c4e-1d88ae20c8ba"), Email: "delete@test.auth", Username: "deleteAuth", Birthdate: time.Unix(10002, 0).UTC(), PasswordHash: []byte("pass")}
-	insertUser(a, deleteUser)
+	updateUser := db_new.InsertUserParams{
+		ID:           util.PGUUID(uuid.MustParse("b813c6e3-9cd0-4aed-9c4e-1d88ae20c8ba")),
+		Email:        "update@test.auth",
+		Username:     "updateAuth",
+		Birthdate:    util.PGDateFromTime(time.Unix(10001, 0).UTC()),
+		PasswordHash: []byte("pass"),
+		Created:      util.PGNow(),
+		LastSeen:     util.PGNow(),
+	}
+	insertUser(queries, updateUser)
+
+	updatePassUser := db_new.InsertUserParams{
+		ID:           util.PGUUID(uuid.MustParse("c813c6e3-9cd0-4aed-9c4e-1d88ae20c8ba")),
+		Email:        "updatePass@test.auth",
+		Username:     "updatePassAuth",
+		Birthdate:    util.PGDateFromTime(time.Unix(10002, 0).UTC()),
+		PasswordHash: []byte("pass"),
+		Created:      util.PGNow(),
+		LastSeen:     util.PGNow(),
+	}
+	insertUser(queries, updatePassUser)
+
+	deleteUser := db_new.InsertUserParams{
+		ID:           util.PGUUID(uuid.MustParse("d813c6e3-9cd0-4aed-9c4e-1d88ae20c8ba")),
+		Email:        "delete@test.auth",
+		Username:     "deleteAuth",
+		Birthdate:    util.PGDateFromTime(time.Unix(10002, 0).UTC()),
+		PasswordHash: []byte("pass"),
+		Created:      util.PGNow(),
+		LastSeen:     util.PGNow(),
+	}
+	insertUser(queries, deleteUser)
 
 	// test sessions
-	getSesh := &db.SessionRow{ID: uuid.MustParse("a813c6e3-9cd0-4aed-9c4e-1d87ae20c111"), UserID: uuid.MustParse("a813c6e3-9cd0-4aed-9c4e-1d88ae20c8ba"),
-		Expires: time.Now().Add(time.Hour), LastSeenTime: time.Unix(1000, 0), LoginTime: time.Unix(1000, 0), UserAgent: "testAgent"}
-	insertSession(a, getSesh)
-	updateSesh := &db.SessionRow{ID: uuid.MustParse("b813c6e3-9cd0-4aed-9c4e-1d87ae20c111"), UserID: uuid.MustParse("a813c6e3-9cd0-4aed-9c4e-1d88ae20c8ba"),
-		Expires: time.Unix(1000, 0), LastSeenTime: time.Unix(1000, 0), LoginTime: time.Unix(1000, 0), UserAgent: "testAgent"}
-	insertSession(a, updateSesh)
-	deleteSesh := &db.SessionRow{ID: uuid.MustParse("a813c6e3-9cd0-4aed-9c4e-1d87ae20c222"), UserID: uuid.MustParse("a813c6e3-9cd0-4aed-9c4e-1d88ae20c8ba"),
-		Expires: time.Unix(1000, 0), LastSeenTime: time.Unix(1000, 0), LoginTime: time.Unix(1000, 0), UserAgent: "testAgent"}
-	insertSession(a, deleteSesh)
+	getSesh := db_new.InsertSessionParams{ID: util.PGUUID(uuid.MustParse("a813c6e3-9cd0-4aed-9c4e-1d87ae20c111")), UserID: util.PGUUID(uuid.MustParse("a813c6e3-9cd0-4aed-9c4e-1d88ae20c8ba")),
+		Expires: util.PGFromTime(time.Now().Add(time.Hour)), LastSeenTime: util.PGFromTime(time.Unix(1000, 0)), LoginTime: util.PGFromTime(time.Unix(1000, 0)), UserAgent: "testAgent"}
+	insertSession(queries, getSesh)
+	updateSesh := db_new.InsertSessionParams{ID: util.PGUUID(uuid.MustParse("b813c6e3-9cd0-4aed-9c4e-1d87ae20c111")), UserID: util.PGUUID(uuid.MustParse("a813c6e3-9cd0-4aed-9c4e-1d88ae20c8ba")),
+		Expires: util.PGFromTime(time.Unix(1000, 0)), LastSeenTime: util.PGFromTime(time.Unix(1000, 0)), LoginTime: util.PGFromTime(time.Unix(1000, 0)), UserAgent: "testAgent"}
+	insertSession(queries, updateSesh)
+	deleteSesh := db_new.InsertSessionParams{ID: util.PGUUID(uuid.MustParse("a813c6e3-9cd0-4aed-9c4e-1d87ae20c222")), UserID: util.PGUUID(uuid.MustParse("a813c6e3-9cd0-4aed-9c4e-1d88ae20c8ba")),
+		Expires: util.PGFromTime(time.Unix(1000, 0)), LastSeenTime: util.PGFromTime(time.Unix(1000, 0)), LoginTime: util.PGFromTime(time.Unix(1000, 0)), UserAgent: "testAgent"}
+	insertSession(queries, deleteSesh)
 
 	o := db.NewOAuthStorePG(dbpg)
 	// test auth codes
@@ -298,8 +328,8 @@ func setupAuthDB() {
 	insertAccessToken(o, deleteToken)
 }
 
-func insertUser(a *db.AuthStorePG, u *db.UserRow) {
-	err := a.InsertUser(context.Background(), u)
+func insertUser(queries *db_new.Queries, u db_new.InsertUserParams) {
+	err := queries.InsertUser(context.Background(), u)
 	if err != nil {
 		log.Println("db.auth_test.insertUser() id:", u.ID)
 		log.Println("db.auth_test.insertUser() id:", u.Email)
@@ -307,8 +337,8 @@ func insertUser(a *db.AuthStorePG, u *db.UserRow) {
 	}
 }
 
-func insertSession(a *db.AuthStorePG, s *db.SessionRow) {
-	err := a.InsertSession(context.Background(), s)
+func insertSession(queries *db_new.Queries, s db_new.InsertSessionParams) {
+	_, err := queries.InsertSession(context.Background(), s)
 	if err != nil {
 		log.Fatalln("db.auth_test.insertSession() error:", err)
 	}

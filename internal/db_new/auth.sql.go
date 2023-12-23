@@ -11,7 +11,316 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const deleteAccessToken = `-- name: DeleteAccessToken :exec
+DELETE FROM AccessTokens WHERE token=$1
+`
+
+func (q *Queries) DeleteAccessToken(ctx context.Context, token []byte) error {
+	_, err := q.db.Exec(ctx, deleteAccessToken, token)
+	return err
+}
+
+const deleteAuthCode = `-- name: DeleteAuthCode :exec
+DELETE FROM AuthCodes WHERE code=$1
+`
+
+func (q *Queries) DeleteAuthCode(ctx context.Context, code []byte) error {
+	_, err := q.db.Exec(ctx, deleteAuthCode, code)
+	return err
+}
+
+const deleteSession = `-- name: DeleteSession :exec
+DELETE FROM Sessions WHERE id=$1
+`
+
+func (q *Queries) DeleteSession(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteSession, id)
+	return err
+}
+
+const deleteUser = `-- name: DeleteUser :exec
+DELETE FROM Users WHERE id=$1
+`
+
+func (q *Queries) DeleteUser(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteUser, id)
+	return err
+}
+
+const getAccessTokenAndUser = `-- name: GetAccessTokenAndUser :one
+SELECT token, auth_code, refresh_token, user_id, a.created, expires, id, email, username, birthdate, password_hash, u.created, last_seen FROM AccessTokens a
+JOIN Users u ON a.user_id=u.id
+WHERE a.token=$1
+`
+
+type GetAccessTokenAndUserRow struct {
+	Token        []byte
+	AuthCode     []byte
+	RefreshToken []byte
+	UserID       pgtype.UUID
+	Created      pgtype.Timestamptz
+	Expires      int32
+	ID           pgtype.UUID
+	Email        string
+	Username     string
+	Birthdate    pgtype.Date
+	PasswordHash []byte
+	Created_2    pgtype.Timestamptz
+	LastSeen     pgtype.Timestamptz
+}
+
+func (q *Queries) GetAccessTokenAndUser(ctx context.Context, token []byte) (GetAccessTokenAndUserRow, error) {
+	row := q.db.QueryRow(ctx, getAccessTokenAndUser, token)
+	var i GetAccessTokenAndUserRow
+	err := row.Scan(
+		&i.Token,
+		&i.AuthCode,
+		&i.RefreshToken,
+		&i.UserID,
+		&i.Created,
+		&i.Expires,
+		&i.ID,
+		&i.Email,
+		&i.Username,
+		&i.Birthdate,
+		&i.PasswordHash,
+		&i.Created_2,
+		&i.LastSeen,
+	)
+	return i, err
+}
+
+const getAccessTokenByRefresh = `-- name: GetAccessTokenByRefresh :one
+SELECT token, auth_code, refresh_token, user_id, created, expires FROM AccessTokens WHERE refresh_token=$1
+`
+
+func (q *Queries) GetAccessTokenByRefresh(ctx context.Context, refreshToken []byte) (Accesstoken, error) {
+	row := q.db.QueryRow(ctx, getAccessTokenByRefresh, refreshToken)
+	var i Accesstoken
+	err := row.Scan(
+		&i.Token,
+		&i.AuthCode,
+		&i.RefreshToken,
+		&i.UserID,
+		&i.Created,
+		&i.Expires,
+	)
+	return i, err
+}
+
+const getAuthCode = `-- name: GetAuthCode :one
+SELECT code, client_id, user_id, scope, expires FROM AuthCodes WHERE code=$1
+`
+
+func (q *Queries) GetAuthCode(ctx context.Context, code []byte) (Authcode, error) {
+	row := q.db.QueryRow(ctx, getAuthCode, code)
+	var i Authcode
+	err := row.Scan(
+		&i.Code,
+		&i.ClientID,
+		&i.UserID,
+		&i.Scope,
+		&i.Expires,
+	)
+	return i, err
+}
+
+const getSession = `-- name: GetSession :one
+SELECT id, user_id, login_time, last_seen_time, expires, user_agent FROM Sessions WHERE id=$1
+`
+
+func (q *Queries) GetSession(ctx context.Context, id pgtype.UUID) (Session, error) {
+	row := q.db.QueryRow(ctx, getSession, id)
+	var i Session
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.LoginTime,
+		&i.LastSeenTime,
+		&i.Expires,
+		&i.UserAgent,
+	)
+	return i, err
+}
+
+const getSessionAndUser = `-- name: GetSessionAndUser :one
+SELECT sessions.id, sessions.user_id, sessions.login_time, sessions.last_seen_time, sessions.expires, sessions.user_agent, users.id, users.email, users.username, users.birthdate, users.password_hash, users.created, users.last_seen
+FROM Sessions 
+JOIN Users ON Sessions.user_id = Users.id 
+WHERE Sessions.id = $1
+`
+
+type GetSessionAndUserRow struct {
+	Session Session
+	User    User
+}
+
+func (q *Queries) GetSessionAndUser(ctx context.Context, id pgtype.UUID) (GetSessionAndUserRow, error) {
+	row := q.db.QueryRow(ctx, getSessionAndUser, id)
+	var i GetSessionAndUserRow
+	err := row.Scan(
+		&i.Session.ID,
+		&i.Session.UserID,
+		&i.Session.LoginTime,
+		&i.Session.LastSeenTime,
+		&i.Session.Expires,
+		&i.Session.UserAgent,
+		&i.User.ID,
+		&i.User.Email,
+		&i.User.Username,
+		&i.User.Birthdate,
+		&i.User.PasswordHash,
+		&i.User.Created,
+		&i.User.LastSeen,
+	)
+	return i, err
+}
+
+const getUserByEmail = `-- name: GetUserByEmail :one
+SELECT id, email, username, birthdate, password_hash, created, last_seen FROM Users WHERE LOWER(email)=LOWER($1)
+`
+
+func (q *Queries) GetUserByEmail(ctx context.Context, lower string) (User, error) {
+	row := q.db.QueryRow(ctx, getUserByEmail, lower)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.Username,
+		&i.Birthdate,
+		&i.PasswordHash,
+		&i.Created,
+		&i.LastSeen,
+	)
+	return i, err
+}
+
+const getUserByID = `-- name: GetUserByID :one
+SELECT id, email, username, birthdate, password_hash, created, last_seen FROM Users WHERE id=$1
+`
+
+func (q *Queries) GetUserByID(ctx context.Context, id pgtype.UUID) (User, error) {
+	row := q.db.QueryRow(ctx, getUserByID, id)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.Username,
+		&i.Birthdate,
+		&i.PasswordHash,
+		&i.Created,
+		&i.LastSeen,
+	)
+	return i, err
+}
+
+const getUserByUsername = `-- name: GetUserByUsername :one
+SELECT id, email, username, birthdate, password_hash, created, last_seen FROM Users WHERE LOWER(username)=LOWER($1)
+`
+
+func (q *Queries) GetUserByUsername(ctx context.Context, lower string) (User, error) {
+	row := q.db.QueryRow(ctx, getUserByUsername, lower)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.Username,
+		&i.Birthdate,
+		&i.PasswordHash,
+		&i.Created,
+		&i.LastSeen,
+	)
+	return i, err
+}
+
+const insertAccessToken = `-- name: InsertAccessToken :exec
+INSERT INTO AccessTokens (token,auth_code,refresh_token,user_id,created,expires)
+VALUES($1,$2,$3,$4,$5,$6)
+`
+
+type InsertAccessTokenParams struct {
+	Token        []byte
+	AuthCode     []byte
+	RefreshToken []byte
+	UserID       pgtype.UUID
+	Created      pgtype.Timestamptz
+	Expires      int32
+}
+
+func (q *Queries) InsertAccessToken(ctx context.Context, arg InsertAccessTokenParams) error {
+	_, err := q.db.Exec(ctx, insertAccessToken,
+		arg.Token,
+		arg.AuthCode,
+		arg.RefreshToken,
+		arg.UserID,
+		arg.Created,
+		arg.Expires,
+	)
+	return err
+}
+
+const insertAuthCode = `-- name: InsertAuthCode :exec
+INSERT INTO AuthCodes (code,client_id,user_id,scope,expires)
+VALUES($1,$2,$3,$4,$5)
+`
+
+type InsertAuthCodeParams struct {
+	Code     []byte
+	ClientID string
+	UserID   pgtype.UUID
+	Scope    string
+	Expires  pgtype.Timestamptz
+}
+
+func (q *Queries) InsertAuthCode(ctx context.Context, arg InsertAuthCodeParams) error {
+	_, err := q.db.Exec(ctx, insertAuthCode,
+		arg.Code,
+		arg.ClientID,
+		arg.UserID,
+		arg.Scope,
+		arg.Expires,
+	)
+	return err
+}
+
+const insertSession = `-- name: InsertSession :one
+INSERT INTO Sessions (id, user_id, login_time, last_seen_time, expires, user_agent) 
+VALUES($1, $2, $3, $4, $5, $6)
+RETURNING id, user_id, login_time, last_seen_time, expires, user_agent
+`
+
+type InsertSessionParams struct {
+	ID           pgtype.UUID
+	UserID       pgtype.UUID
+	LoginTime    pgtype.Timestamptz
+	LastSeenTime pgtype.Timestamptz
+	Expires      pgtype.Timestamptz
+	UserAgent    string
+}
+
+func (q *Queries) InsertSession(ctx context.Context, arg InsertSessionParams) (Session, error) {
+	row := q.db.QueryRow(ctx, insertSession,
+		arg.ID,
+		arg.UserID,
+		arg.LoginTime,
+		arg.LastSeenTime,
+		arg.Expires,
+		arg.UserAgent,
+	)
+	var i Session
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.LoginTime,
+		&i.LastSeenTime,
+		&i.Expires,
+		&i.UserAgent,
+	)
+	return i, err
+}
+
 const insertUser = `-- name: InsertUser :exec
+
 INSERT INTO Users (
 	id,email,username,birthdate,password_hash, created, last_seen
 ) VALUES (
@@ -29,6 +338,7 @@ type InsertUserParams struct {
 	LastSeen     pgtype.Timestamptz
 }
 
+// -- User ----
 func (q *Queries) InsertUser(ctx context.Context, arg InsertUserParams) error {
 	_, err := q.db.Exec(ctx, insertUser,
 		arg.ID,
@@ -39,5 +349,67 @@ func (q *Queries) InsertUser(ctx context.Context, arg InsertUserParams) error {
 		arg.Created,
 		arg.LastSeen,
 	)
+	return err
+}
+
+const updateSession = `-- name: UpdateSession :exec
+UPDATE Sessions SET user_id=$2,login_time=$3,last_seen_time=$4,expires=$5,user_agent=$6 WHERE id=$1
+`
+
+type UpdateSessionParams struct {
+	ID           pgtype.UUID
+	UserID       pgtype.UUID
+	LoginTime    pgtype.Timestamptz
+	LastSeenTime pgtype.Timestamptz
+	Expires      pgtype.Timestamptz
+	UserAgent    string
+}
+
+func (q *Queries) UpdateSession(ctx context.Context, arg UpdateSessionParams) error {
+	_, err := q.db.Exec(ctx, updateSession,
+		arg.ID,
+		arg.UserID,
+		arg.LoginTime,
+		arg.LastSeenTime,
+		arg.Expires,
+		arg.UserAgent,
+	)
+	return err
+}
+
+const updateUser = `-- name: UpdateUser :exec
+UPDATE Users SET email=$2,username=$3,birthdate=$4,last_seen=$5 WHERE id=$1
+`
+
+type UpdateUserParams struct {
+	ID        pgtype.UUID
+	Email     string
+	Username  string
+	Birthdate pgtype.Date
+	LastSeen  pgtype.Timestamptz
+}
+
+func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) error {
+	_, err := q.db.Exec(ctx, updateUser,
+		arg.ID,
+		arg.Email,
+		arg.Username,
+		arg.Birthdate,
+		arg.LastSeen,
+	)
+	return err
+}
+
+const updateUserPassword = `-- name: UpdateUserPassword :exec
+UPDATE Users SET password_hash=$1 WHERE id=$2
+`
+
+type UpdateUserPasswordParams struct {
+	PasswordHash []byte
+	ID           pgtype.UUID
+}
+
+func (q *Queries) UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error {
+	_, err := q.db.Exec(ctx, updateUserPassword, arg.PasswordHash, arg.ID)
 	return err
 }

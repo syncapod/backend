@@ -15,20 +15,23 @@ import (
 	"github.com/sschwartz96/syncapod-backend/internal"
 	"github.com/sschwartz96/syncapod-backend/internal/auth"
 	"github.com/sschwartz96/syncapod-backend/internal/db"
+	"github.com/sschwartz96/syncapod-backend/internal/db_new"
 	protos "github.com/sschwartz96/syncapod-backend/internal/gen"
 	"github.com/sschwartz96/syncapod-backend/internal/podcast"
+	"github.com/sschwartz96/syncapod-backend/internal/util"
 	"github.com/stretchr/testify/require"
 	"github.com/twitchtv/twirp"
 )
 
 var (
 	dbpg     *pgxpool.Pool
-	testUser = &db.UserRow{
-		ID:    uuid.MustParse("b921c6e3-9cd0-4aed-9c4e-1d88ae20c777"),
+	testUser = db_new.User{
+		ID:    util.PGUUID(uuid.MustParse("b921c6e3-9cd0-4aed-9c4e-1d88ae20c777")),
 		Email: "user@twirp.test", Username: "user_twirp_test",
-		Birthdate:    time.Unix(0, 0).UTC(),
+		Birthdate:    util.PGDateFromTime(time.Unix(0, 0).UTC()),
 		PasswordHash: []byte("$2y$12$ndywn/c6wcB0oPv1ZRMLgeSQjTpXzOUCQy.5vdYvJxO9CS644i6Ce"),
-		Created:      time.Unix(0, 0), LastSeen: time.Unix(0, 0),
+		Created:      util.PGFromTime(time.Unix(0, 0)),
+		LastSeen:     util.PGFromTime(time.Unix(0, 0)),
 	}
 )
 
@@ -54,7 +57,7 @@ func TestMain(m *testing.M) {
 		log.Fatalf("twirp.TestMain() error setting up db for admin: %v", err)
 	}
 
-	authController := auth.NewAuthController(db.NewAuthStorePG(dbpg), db.NewOAuthStorePG(dbpg))
+	authController := auth.NewAuthController(db.NewOAuthStorePG(dbpg), db_new.New(dbpg))
 	podController, err := podcast.NewPodController(db.NewPodcastStore(dbpg))
 	if err != nil {
 		log.Fatalf("twirp.TestMain() error setting up PodController: %v", err)
@@ -89,8 +92,8 @@ func TestMain(m *testing.M) {
 }
 
 func setupAuthDB() error {
-	authStore := db.NewAuthStorePG(dbpg)
-	err := authStore.InsertUser(context.Background(), testUser)
+	queries := db_new.New(dbpg)
+	err := queries.InsertUser(context.Background(), db_new.InsertUserParams(testUser))
 	if err != nil {
 		return fmt.Errorf("failed to insert user: %v", err)
 	}

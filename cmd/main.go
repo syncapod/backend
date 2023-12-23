@@ -76,12 +76,11 @@ func main() {
 	}
 
 	// setup stores
-	authStore := db.NewAuthStorePG(pgdb)
 	oauthStore := db.NewOAuthStorePG(pgdb)
 	podStore := db.NewPodcastStore(pgdb)
 
 	// setup controllers
-	authController := auth.NewAuthController(authStore, oauthStore)
+	authController := auth.NewAuthController(oauthStore, queries)
 	podController, err := podcast.NewPodController(podStore)
 	if err != nil {
 		log.Error("error setting up pod controller", util.Err(err))

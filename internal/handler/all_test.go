@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"log/slog"
 	"net/http/httptest"
@@ -21,6 +21,8 @@ import (
 	"github.com/sschwartz96/syncapod-backend/internal"
 	"github.com/sschwartz96/syncapod-backend/internal/auth"
 	"github.com/sschwartz96/syncapod-backend/internal/db"
+	"github.com/sschwartz96/syncapod-backend/internal/db_new"
+	"github.com/sschwartz96/syncapod-backend/internal/util"
 	"github.com/stretchr/testify/require"
 )
 
@@ -37,7 +39,7 @@ func TestMain(t *testing.M) {
 	}
 
 	// create controllers
-	authC := auth.NewAuthController(db.NewAuthStorePG(pgdb), db.NewOAuthStorePG(pgdb))
+	authC := auth.NewAuthController(db.NewOAuthStorePG(pgdb), db_new.New(pgdb))
 
 	// create handlers
 	oauthHandler, err := createTestOAuthHandler(authC)
@@ -66,7 +68,7 @@ func Test_Oauth(t *testing.T) {
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "https://syncapod.com/oauth/login", nil)
 	testHandler.oauthHandler.Login(rec, req)
-	body, err := ioutil.ReadAll(rec.Body)
+	body, err := io.ReadAll(rec.Body)
 	if err != nil {
 		t.Fatalf("Test_Oauth() GET login error: %v", err)
 	}
@@ -77,7 +79,7 @@ func Test_Oauth(t *testing.T) {
 	req = httptest.NewRequest("POST", "https://syncapod.com/oauth/login", nil)
 	req.Form = url.Values{"uname": {"oauthTest"}, "pass": {"password"}, "redirect_uri": {"https://testuri.com"}}
 	testHandler.oauthHandler.Login(rec, req)
-	body, err = ioutil.ReadAll(rec.Body)
+	body, err = io.ReadAll(rec.Body)
 	if err != nil {
 		t.Fatalf("Test_Oauth() POST login error: %v", err)
 	}
@@ -89,7 +91,7 @@ func Test_Oauth(t *testing.T) {
 	rec = httptest.NewRecorder()
 	req = httptest.NewRequest("GET", uri, nil)
 	testHandler.oauthHandler.Authorize(rec, req)
-	body, err = ioutil.ReadAll(rec.Body)
+	body, err = io.ReadAll(rec.Body)
 	if err != nil {
 		t.Fatalf("Test_Oauth() GET authorize error: %v", err)
 	}
@@ -100,7 +102,7 @@ func Test_Oauth(t *testing.T) {
 	req = httptest.NewRequest("POST", uri, nil)
 	testHandler.oauthHandler.Authorize(rec, req)
 	res := rec.Result()
-	_, err = ioutil.ReadAll(res.Body)
+	_, err = io.ReadAll(res.Body)
 	if err != nil {
 		t.Fatalf("Test_Oauth() POST authorize error: %v", err)
 	}
@@ -162,7 +164,7 @@ func testOauthToken(t *testing.T, urlValues map[string]string) string {
 //	}{}
 //}
 
-func createTestOAuthHandler(authC auth.Auth) (*OauthHandler, error) {
+func createTestOAuthHandler(authC *auth.AuthController) (*OauthHandler, error) {
 	loginT, err := template.ParseFiles("../../templates/oauth/login.gohtml")
 	if err != nil {
 		return nil, err
@@ -175,15 +177,16 @@ func createTestOAuthHandler(authC auth.Auth) (*OauthHandler, error) {
 }
 
 func setup(pg *pgxpool.Pool) {
-	a := db.NewAuthStorePG(pg)
-	insertUser(a, &db.UserRow{ID: uuid.MustParse("b7f85a20-9b8f-47f9-8cee-a553a24f2b6d"),
-		Birthdate: time.Unix(0, 0), Email: "oauthTest@test.com", Username: "oauthTest",
+	queries := db_new.New(pg)
+	insertUser(queries, db_new.InsertUserParams{ID: util.PGUUID(uuid.MustParse("b7f85a20-9b8f-47f9-8cee-a553a24f2b6d")),
+		Birthdate: util.PGDateFromTime(time.Unix(0, 0)), Email: "oauthTest@test.com", Username: "oauthTest",
 		PasswordHash: []byte("$2a$10$bAkGU1SFc.oy9jz5/psXweSCqWG6reZr3Tl3oTKAgzBksPKHLG4bS"),
-		Created:      time.Unix(0, 0), LastSeen: time.Unix(0, 0)})
+		Created:      util.PGFromTime(time.Unix(0, 0)), LastSeen: util.PGFromTime(time.Unix(0, 0)),
+	})
 }
 
-func insertUser(a *db.AuthStorePG, u *db.UserRow) {
-	err := a.InsertUser(context.Background(), u)
+func insertUser(queries *db_new.Queries, u db_new.InsertUserParams) {
+	err := queries.InsertUser(context.Background(), u)
 	if err != nil {
 		fmt.Println("insertUser() id:", u.ID)
 		fmt.Println("insertUser() error:", err)

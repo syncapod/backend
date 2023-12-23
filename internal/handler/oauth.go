@@ -17,7 +17,7 @@ import (
 
 // OauthHandler handles authorization and authentication to oauth clients
 type OauthHandler struct {
-	authController auth.Auth
+	authController *auth.AuthController
 	loginTemplate  *template.Template
 	authTemplate   *template.Template
 	clients        map[string]string
@@ -25,7 +25,7 @@ type OauthHandler struct {
 }
 
 // CreateOauthHandler just intantiates an OauthHandler
-func CreateOauthHandler(authController auth.Auth, clients map[string]string, log *slog.Logger) (*OauthHandler, error) {
+func CreateOauthHandler(authController *auth.AuthController, clients map[string]string, log *slog.Logger) (*OauthHandler, error) {
 	loginT, err := template.ParseFiles("./templates/oauth/login.gohtml")
 	if err != nil {
 		return nil, err
@@ -86,7 +86,12 @@ func (h *OauthHandler) Login(res http.ResponseWriter, req *http.Request) {
 
 	req.Method = http.MethodGet
 	values := url.Values{}
-	values.Add("sesh_key", sesh.ID.String())
+	seshIdStr, err := util.StringFromPGUUID(sesh.ID)
+	if err != nil {
+		h.log.Error("oauth logging error parsing session id", util.Err(err))
+		return
+	}
+	values.Add("sesh_key", seshIdStr)
 	values.Add("client_id", req.URL.Query().Get("client_id"))
 	values.Add("redirect_uri", req.URL.Query().Get("redirect_uri"))
 	values.Add("state", req.URL.Query().Get("state"))
@@ -129,7 +134,7 @@ func (h *OauthHandler) Authorize(res http.ResponseWriter, req *http.Request) {
 
 	// create auth code
 	clientID := strings.TrimSpace(req.URL.Query().Get("client_id"))
-	authCode, err := h.authController.CreateAuthCode(req.Context(), user.ID, clientID)
+	authCode, err := h.authController.CreateAuthCode(req.Context(), user.ID.Bytes, clientID)
 	if err != nil {
 		h.log.Error("error creating oauth authorization code", util.Err(err))
 		values.Add("error", "server_error")

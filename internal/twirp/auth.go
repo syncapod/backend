@@ -6,6 +6,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/sschwartz96/syncapod-backend/internal/auth"
 	protos "github.com/sschwartz96/syncapod-backend/internal/gen"
+	"github.com/sschwartz96/syncapod-backend/internal/util"
 	"github.com/twitchtv/twirp"
 )
 
@@ -25,8 +26,12 @@ func (a *AuthService) Authenticate(ctx context.Context, req *protos.Authenticate
 	if err != nil {
 		return nil, twirp.InvalidArgument.Errorf("Error on login: %w", err)
 	}
+	sessionKeyStr, err := util.StringFromPGUUID(seshRow.ID)
+	if err != nil {
+		return nil, twirp.InternalErrorWith(err)
+	}
 	return &protos.AuthenticateRes{
-		SessionKey: seshRow.ID.String(),
+		SessionKey: sessionKeyStr,
 		User:       convertUserFromDB(userRow),
 	}, nil
 }

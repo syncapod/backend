@@ -41,12 +41,12 @@ const (
 )
 
 type AlexaHandler struct {
-	auth auth.Auth
+	auth *auth.AuthController
 	pod  *podcast.PodController
 	log  *slog.Logger
 }
 
-func CreateAlexaHandler(auth auth.Auth, podCon *podcast.PodController, log *slog.Logger) *AlexaHandler {
+func CreateAlexaHandler(auth *auth.AuthController, podCon *podcast.PodController, log *slog.Logger) *AlexaHandler {
 	return &AlexaHandler{
 		auth: auth,
 		pod:  podCon,

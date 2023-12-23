@@ -8,12 +8,13 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/sschwartz96/syncapod-backend/internal/db"
+	"github.com/sschwartz96/syncapod-backend/internal/db_new"
 )
 
 func TestAuthController_CreateAuthCode(t *testing.T) {
 	type fields struct {
-		authStore  db.AuthStore
 		oauthStore db.OAuthStore
+		queries    *db_new.Queries
 	}
 	type args struct {
 		ctx      context.Context
@@ -29,15 +30,15 @@ func TestAuthController_CreateAuthCode(t *testing.T) {
 		{
 			name:    "valid",
 			args:    args{ctx: context.Background(), clientID: "oauthClient", userID: uuid.MustParse("a813c6e3-9cd0-4aed-9c4e-1d88ae20c8ba")},
-			fields:  fields{authStore: authStore, oauthStore: oauthStore},
+			fields:  fields{oauthStore: oauthStore, queries: queries},
 			wantErr: false,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			a := &AuthController{
-				authStore:  tt.fields.authStore,
 				oauthStore: tt.fields.oauthStore,
+				queries:    tt.fields.queries,
 			}
 			got, err := a.CreateAuthCode(tt.args.ctx, tt.args.userID, tt.args.clientID)
 			if (err != nil) != tt.wantErr {
@@ -56,8 +57,8 @@ func TestAuthController_CreateAuthCode(t *testing.T) {
 func TestAuthController_CreateAccessToken(t *testing.T) {
 	gc, _ := DecodeKey("get_code")
 	type fields struct {
-		authStore  db.AuthStore
 		oauthStore db.OAuthStore
+		queries    *db_new.Queries
 	}
 	type args struct {
 		ctx      context.Context
@@ -72,15 +73,15 @@ func TestAuthController_CreateAccessToken(t *testing.T) {
 		{
 			name:    "valid",
 			args:    args{ctx: context.Background(), authCode: &db.AuthCodeRow{Code: gc, ClientID: "get_client", Scope: "get_scope", UserID: uuid.MustParse("a813c6e3-9cd0-4aed-9c4e-1d88ae20c8ba")}},
-			fields:  fields{authStore: authStore, oauthStore: oauthStore},
+			fields:  fields{oauthStore: oauthStore, queries: queries},
 			wantErr: false,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			a := &AuthController{
-				authStore:  tt.fields.authStore,
 				oauthStore: tt.fields.oauthStore,
+				queries:    tt.fields.queries,
 			}
 			got, err := a.CreateAccessToken(tt.args.ctx, tt.args.authCode)
 			if (err != nil) != tt.wantErr {
@@ -99,8 +100,8 @@ func TestAuthController_ValidateAuthCode(t *testing.T) {
 	gc, _ := DecodeKey("get_code")
 	ec, _ := DecodeKey("expire_code")
 	type fields struct {
-		authStore  db.AuthStore
 		oauthStore db.OAuthStore
+		queries    *db_new.Queries
 	}
 	type args struct {
 		ctx  context.Context
@@ -116,14 +117,14 @@ func TestAuthController_ValidateAuthCode(t *testing.T) {
 		{
 			name:    "valid",
 			args:    args{ctx: context.Background(), code: EncodeKey(gc)},
-			fields:  fields{authStore: authStore, oauthStore: oauthStore},
+			fields:  fields{oauthStore: oauthStore, queries: queries},
 			want:    &db.AuthCodeRow{Code: gc, ClientID: "get_client", Scope: "get_scope", UserID: uuid.MustParse("a813c6e3-9cd0-4aed-9c4e-1d88ae20c8ba")},
 			wantErr: false,
 		},
 		{
 			name:    "expired",
 			args:    args{ctx: context.Background(), code: EncodeKey(ec)},
-			fields:  fields{authStore: authStore, oauthStore: oauthStore},
+			fields:  fields{oauthStore: oauthStore, queries: queries},
 			want:    nil,
 			wantErr: true,
 		},
@@ -131,8 +132,8 @@ func TestAuthController_ValidateAuthCode(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			a := &AuthController{
-				authStore:  tt.fields.authStore,
 				oauthStore: tt.fields.oauthStore,
+				queries:    tt.fields.queries,
 			}
 			got, err := a.ValidateAuthCode(tt.args.ctx, tt.args.code)
 			if (err != nil) != tt.wantErr {
@@ -153,8 +154,8 @@ func TestAuthController_ValidateAccessToken(t *testing.T) {
 	tk, _ := DecodeKey("token")
 	dtk, _ := DecodeKey("del_token")
 	type fields struct {
-		authStore  db.AuthStore
 		oauthStore db.OAuthStore
+		queries    *db_new.Queries
 	}
 	type args struct {
 		ctx   context.Context
@@ -170,14 +171,14 @@ func TestAuthController_ValidateAccessToken(t *testing.T) {
 		{
 			name:    "valid",
 			args:    args{ctx: context.Background(), token: EncodeKey(tk)},
-			fields:  fields{authStore: authStore, oauthStore: oauthStore},
+			fields:  fields{oauthStore: oauthStore, queries: queries},
 			want:    &db.UserRow{ID: uuid.MustParse("a813c6e3-9cd0-4aed-9c4e-1d88ae20c8ba"), Email: "get@test.test", Username: "get", Birthdate: time.Unix(0, 0).UTC()},
 			wantErr: false,
 		},
 		{
 			name:    "expired",
 			args:    args{ctx: context.Background(), token: EncodeKey(dtk)},
-			fields:  fields{authStore: authStore, oauthStore: oauthStore},
+			fields:  fields{oauthStore: oauthStore, queries: queries},
 			want:    nil,
 			wantErr: true,
 		},
@@ -185,8 +186,8 @@ func TestAuthController_ValidateAccessToken(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			a := &AuthController{
-				authStore:  tt.fields.authStore,
 				oauthStore: tt.fields.oauthStore,
+				queries:    tt.fields.queries,
 			}
 			got, err := a.ValidateAccessToken(tt.args.ctx, tt.args.token)
 			if (err != nil) != tt.wantErr {
@@ -207,8 +208,8 @@ func TestAuthController_ValidateRefreshToken(t *testing.T) {
 	rk, _ := DecodeKey("rftoken")
 	gc, _ := DecodeKey("get_code")
 	type fields struct {
-		authStore  db.AuthStore
 		oauthStore db.OAuthStore
+		queries    *db_new.Queries
 	}
 	type args struct {
 		ctx   context.Context
@@ -224,7 +225,7 @@ func TestAuthController_ValidateRefreshToken(t *testing.T) {
 		{
 			name:    "valid",
 			args:    args{ctx: context.Background(), token: EncodeKey(rk)},
-			fields:  fields{authStore: authStore, oauthStore: oauthStore},
+			fields:  fields{oauthStore: oauthStore, queries: queries},
 			want:    &db.AccessTokenRow{AuthCode: gc, Created: time.Now(), Expires: 3600, RefreshToken: rk, Token: tk, UserID: uuid.MustParse("a813c6e3-9cd0-4aed-9c4e-1d88ae20c8ba")},
 			wantErr: false,
 		},
@@ -232,8 +233,8 @@ func TestAuthController_ValidateRefreshToken(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			a := &AuthController{
-				authStore:  tt.fields.authStore,
 				oauthStore: tt.fields.oauthStore,
+				queries:    tt.fields.queries,
 			}
 			got, err := a.ValidateRefreshToken(tt.args.ctx, tt.args.token)
 			if (err != nil) != tt.wantErr {

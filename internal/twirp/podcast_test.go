@@ -11,7 +11,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/sschwartz96/syncapod-backend/internal/db"
+	"github.com/sschwartz96/syncapod-backend/internal/db_new"
 	protos "github.com/sschwartz96/syncapod-backend/internal/gen"
+	"github.com/sschwartz96/syncapod-backend/internal/util"
 	"github.com/stretchr/testify/require"
 	"github.com/twitchtv/twirp"
 )
@@ -22,10 +24,17 @@ var (
 	testPod2    = &db.Podcast{ID: uuid.New(), Author: "Simon Schwartz", Description: "Syncapod Podcast 2", LinkURL: "https://syncapod.com/podcast2", ImageURL: "http://syncapod.com/logo.png", Language: "en", Category: []int{1, 2, 3}, Explicit: "explicit", RSSURL: "https://syncapod.com/podcast2.rss"}
 	testEpi     = &db.Episode{ID: uuid.New(), PodcastID: testPod.ID, Title: "Test Episode", Episode: 123, PubDate: time.Unix(1000, 0)}
 	testEpi2    = &db.Episode{ID: uuid.New(), PodcastID: testPod.ID, Title: "Test Episode 2", Episode: 124, PubDate: time.Unix(1001, 0)}
-	testUserEpi = &db.UserEpisode{EpisodeID: testEpi.ID, UserID: testUser.ID, LastSeen: time.Now(), OffsetMillis: 123456, Played: false}
-	testSub     = &db.Subscription{UserID: testUser.ID, PodcastID: testPod.ID, CompletedIDs: []uuid.UUID{testEpi.ID}, InProgressIDs: []uuid.UUID{testEpi2.ID}}
-	testSub2    = &db.Subscription{UserID: testUser.ID, PodcastID: testPod2.ID, CompletedIDs: []uuid.UUID{}, InProgressIDs: []uuid.UUID{}}
-	testSesh    = &db.SessionRow{ID: uuid.New(), UserID: testUser.ID, LoginTime: time.Now(), LastSeenTime: time.Now(), Expires: time.Now().Add(time.Hour), UserAgent: "testUserAgent"}
+	testUserEpi = &db.UserEpisode{EpisodeID: testEpi.ID, UserID: testUser.ID.Bytes, LastSeen: time.Now(), OffsetMillis: 123456, Played: false}
+	testSub     = &db.Subscription{UserID: testUser.ID.Bytes, PodcastID: testPod.ID, CompletedIDs: []uuid.UUID{testEpi.ID}, InProgressIDs: []uuid.UUID{testEpi2.ID}}
+	testSub2    = &db.Subscription{UserID: testUser.ID.Bytes, PodcastID: testPod2.ID, CompletedIDs: []uuid.UUID{}, InProgressIDs: []uuid.UUID{}}
+	testSesh    = db_new.Session{
+		ID:           util.PGUUID(uuid.New()),
+		UserID:       testUser.ID,
+		LoginTime:    util.PGNow(),
+		LastSeenTime: util.PGNow(),
+		Expires:      util.PGFromTime(time.Now().Add(time.Hour)),
+		UserAgent:    "testUserAgent",
+	}
 )
 
 func setupPodDB() error {
@@ -54,8 +63,8 @@ func setupPodDB() error {
 		return fmt.Errorf("failed to insert user episode: %v", err)
 	}
 	// insert user session to mimic user already authenticated
-	authStore := db.NewAuthStorePG(dbpg)
-	if err = authStore.InsertSession(context.Background(), testSesh); err != nil {
+	queries := db_new.New(dbpg)
+	if _, err = queries.InsertSession(context.Background(), db_new.InsertSessionParams(testSesh)); err != nil {
 		return fmt.Errorf("failed to insert user session: %v", err)
 	}
 	return nil
@@ -64,7 +73,8 @@ func setupPodDB() error {
 func Test_PodcastGRPC(t *testing.T) {
 	// add metadata for authorization
 	header := make(http.Header)
-	header.Set(authTokenKey, testSesh.ID.String())
+	id, err := util.StringFromPGUUID(testSesh.ID)
+	header.Set(authTokenKey, id)
 	ctx, err := twirp.WithHTTPRequestHeaders(context.Background(), header)
 	if err != nil {
 		t.Fatalf("Twirp could not add add headers: %v", err)

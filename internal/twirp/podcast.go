@@ -143,5 +143,5 @@ func getUserIDFromContext(ctx context.Context) (uuid.UUID, error) {
 		return uuid.UUID{}, fmt.Errorf("getUserIDFromContext() error could not extract data from context")
 	}
 
-	return userData.user.ID, nil
+	return userData.user.ID.Bytes, nil
 }

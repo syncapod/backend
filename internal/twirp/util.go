@@ -7,8 +7,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/sschwartz96/syncapod-backend/internal/db"
+	"github.com/sschwartz96/syncapod-backend/internal/db_new"
 	protos "github.com/sschwartz96/syncapod-backend/internal/gen"
 	"github.com/sschwartz96/syncapod-backend/internal/podcast"
+	"github.com/sschwartz96/syncapod-backend/internal/util"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -22,12 +24,13 @@ func convertUserEpiFromDB(u *db.UserEpisode) *protos.UserEpisode {
 	}
 }
 
-func convertUserFromDB(ur *db.UserRow) *protos.User {
+func convertUserFromDB(ur *db_new.User) *protos.User {
+	id, _ := util.StringFromPGUUID(ur.ID)
 	return &protos.User{
-		Id:       ur.ID.String(),
+		Id:       id,
 		Email:    ur.Email,
 		Username: ur.Username,
-		DOB:      timestamppb.New(ur.Birthdate),
+		DOB:      timestamppb.New(ur.Birthdate.Time),
 	}
 }
 

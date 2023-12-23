@@ -29,20 +29,19 @@ type Auth interface {
 }
 
 type AuthController struct {
-	authStore  db.AuthStore
 	oauthStore db.OAuthStore
 	queries    *db_new.Queries
 	log        *slog.Logger
 }
 
-func NewAuthController(aStore db.AuthStore, oStore db.OAuthStore) *AuthController {
-	return &AuthController{authStore: aStore, oauthStore: oStore}
+func NewAuthController(oStore db.OAuthStore, queries *db_new.Queries) *AuthController {
+	return &AuthController{oauthStore: oStore, queries: queries}
 }
 
 // Login queries db for user and validates password.
 // On success, it creates session and inserts into db
 // returns error if user not found or password is invalid
-func (a *AuthController) Login(ctx context.Context, username, password, agent string) (*db.UserRow, *db.SessionRow, error) {
+func (a *AuthController) Login(ctx context.Context, username, password, agent string) (*db_new.User, *db_new.Session, error) {
 	user, err := a.findUserByEmailOrUsername(ctx, username)
 	if err != nil {
 		return nil, nil, fmt.Errorf("AuthController.Login() error finding user: %v", err)
@@ -50,46 +49,54 @@ func (a *AuthController) Login(ctx context.Context, username, password, agent st
 	if !compare(user.PasswordHash, password) {
 		return nil, nil, fmt.Errorf("AuthController.Login() error incorrect password")
 	}
-	user.PasswordHash = []byte{}
-	session := createSession(user.ID, agent)
-	err = a.authStore.InsertSession(context.Background(), session)
+
+	sessionInsertParams, err := createInsertSessionParams(user.ID.Bytes, agent)
+
+	if err != nil {
+		return nil, nil, fmt.Errorf("AuthController.Login() error creating session %v", err)
+	}
+	session, err := a.queries.InsertSession(ctx, *sessionInsertParams)
 	if err != nil {
 		return nil, nil, fmt.Errorf("AuthController.Login() error inserting new session: %v", err)
 	}
-	return user, session, nil
+
+	// remove user's password hash
+	user.PasswordHash = []byte{}
+	return user, &session, nil
 }
 
 // Authorize queries db for session via id, validates and returns user info.
 // returns error if the session is not found or invalid
-func (a *AuthController) Authorize(ctx context.Context, sessionID uuid.UUID) (*db.UserRow, error) {
-	session, user, err := a.authStore.GetSessionAndUser(ctx, sessionID)
-	now := time.Now()
+func (a *AuthController) Authorize(ctx context.Context, sessionID uuid.UUID) (*db_new.User, error) {
+	userSession, err := a.queries.GetSessionAndUser(ctx, util.PGUUID(sessionID))
 	if err != nil {
 		return nil, fmt.Errorf("AuthController.Authorize() error finding session: %v", err)
 	}
-	if session.Expires.Before(now) {
+
+	now := time.Now()
+	if userSession.Session.Expires.Time.Before(now) {
 		go func() {
-			err := a.authStore.DeleteSession(context.Background(), sessionID)
+			err := a.queries.DeleteSession(context.Background(), userSession.Session.ID)
 			if err != nil {
 				a.log.Warn("error deleting sesion", util.Err(err))
 			}
 		}()
 		return nil, fmt.Errorf("AuthController.Authorize() error: session expired")
 	}
-	session.LastSeenTime = now
-	session.Expires = now.Add(time.Hour * 168)
+	userSession.Session.LastSeenTime = util.PGFromTime(now)
+	userSession.Session.Expires = util.PGFromTime(now.Add(time.Hour * 168))
 	go func() {
-		err := a.authStore.UpdateSession(context.Background(), session)
+		err := a.queries.UpdateSession(context.Background(), db_new.UpdateSessionParams(userSession.Session))
 		if err != nil {
 			a.log.Warn("error updating session", util.Err(err))
 		}
 	}()
-	user.PasswordHash = []byte{}
-	return user, nil
+	userSession.User.PasswordHash = []byte{}
+	return &userSession.User, nil
 }
 
 func (a *AuthController) Logout(ctx context.Context, sessionID uuid.UUID) error {
-	err := a.authStore.DeleteSession(ctx, sessionID)
+	err := a.queries.DeleteSession(ctx, util.PGUUID(sessionID))
 	if err != nil {
 		return fmt.Errorf("AuthController.Logout() error deleting session: %v", err)
 	}
@@ -101,7 +108,7 @@ func (a *AuthController) CreateUser(ctx context.Context, email, username, pwd st
 		return nil, fmt.Errorf("AuthController.CreateUser() error hashing password: %v", err)
 	}
 
-	newUUID, err := util.PGUUID()
+	newUUID, err := util.PGNewUUID()
 	if err != nil {
 		return nil, fmt.Errorf("AuthController.CreateUser() error generating new UUID: %v", err)
 	}
@@ -126,18 +133,18 @@ func (a *AuthController) CreateUser(ctx context.Context, email, username, pwd st
 // findUserByEmailOrUsername is a helper method for login
 // takes in string u which could either be an email address or username
 // returns UserRow upon success
-func (a *AuthController) findUserByEmailOrUsername(ctx context.Context, u string) (*db.UserRow, error) {
-	var user *db.UserRow
+func (a *AuthController) findUserByEmailOrUsername(ctx context.Context, u string) (*db_new.User, error) {
+	var user db_new.User
 	var err error
 	if strings.Contains(u, "@") {
-		user, err = a.authStore.GetUserByEmail(ctx, u)
+		user, err = a.queries.GetUserByEmail(ctx, u)
 	} else {
-		user, err = a.authStore.GetUserByUsername(ctx, u)
+		user, err = a.queries.GetUserByUsername(ctx, u)
 	}
 	if err != nil {
 		return nil, err
 	}
-	return user, nil
+	return &user, nil
 }
 
 // Hash takes pwd string and returns hash type string
@@ -154,15 +161,22 @@ func compare(hash []byte, password string) bool {
 	return bcrypt.CompareHashAndPassword(hash, []byte(password)) == nil
 }
 
-// createSession creates a session
-func createSession(userID uuid.UUID, agent string) *db.SessionRow {
-	now := time.Now()
-	return &db.SessionRow{
-		ID:           uuid.New(),
-		UserID:       userID,
-		Expires:      now.Add(time.Hour * 168),
-		LastSeenTime: now,
-		LoginTime:    now,
-		UserAgent:    agent,
+// createInsertSessionParams creates a InsertSessionParams object ready to be inserted
+func createInsertSessionParams(userID uuid.UUID, agent string) (*db_new.InsertSessionParams, error) {
+	newUUID, err := util.PGNewUUID()
+	if err != nil {
+		return nil, err
 	}
+	now := time.Now()
+	nowPG := util.PGFromTime(now)
+	expiresPG := util.PGFromTime(now.Add(time.Hour * 168))
+
+	return &db_new.InsertSessionParams{
+		ID:           newUUID,
+		UserID:       util.PGUUID(userID),
+		Expires:      expiresPG,
+		LastSeenTime: nowPG,
+		LoginTime:    nowPG,
+		UserAgent:    agent,
+	}, nil
 }

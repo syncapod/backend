@@ -55,3 +55,6 @@ sqlc_generate:
 
 sqlc_vet:
 	sqlc vet
+
+sqlc_verify:
+	sqlc verify

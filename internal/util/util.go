@@ -1,6 +1,7 @@
 package util
 
 import (
+	"errors"
 	"log/slog"
 	"time"
 
@@ -33,10 +34,29 @@ func PGDateFromTime(time time.Time) pgtype.Date {
 	}
 }
 
-func PGUUID() (pgtype.UUID, error) {
+func PGNewUUID() (pgtype.UUID, error) {
 	uuid, err := uuid.NewRandom()
 	if err != nil {
 		return pgtype.UUID{Valid: false}, err
 	}
-	return pgtype.UUID{Bytes: uuid, Valid: true}, nil
+	return PGUUID(uuid), nil
+}
+
+func PGUUID(uuid uuid.UUID) pgtype.UUID {
+	return pgtype.UUID{Bytes: uuid, Valid: true}
+}
+
+func UUIDFromPG(id pgtype.UUID) (uuid.UUID, error) {
+	if !id.Valid {
+		return uuid.UUID{}, errors.New("error pgtype.UUID is not valid")
+	}
+	return uuid.FromBytes(id.Bytes[:])
+}
+
+func StringFromPGUUID(id pgtype.UUID) (string, error) {
+	newID, err := UUIDFromPG(id)
+	if err != nil {
+		return "", err
+	}
+	return newID.String(), nil
 }

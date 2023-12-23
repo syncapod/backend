@@ -22,7 +22,7 @@ type Handler struct {
 }
 
 // CreateHandler sets up the main handler
-func CreateHandler(cfg *config.Config, authC auth.Auth, podCon *podcast.PodController, log *slog.Logger) (*Handler, error) {
+func CreateHandler(cfg *config.Config, authC *auth.AuthController, podCon *podcast.PodController, log *slog.Logger) (*Handler, error) {
 	oauthHandler, err := CreateOauthHandler(
 		authC,
 		map[string]string{

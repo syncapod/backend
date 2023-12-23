@@ -9,8 +9,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/sschwartz96/syncapod-backend/internal/db"
+	"github.com/sschwartz96/syncapod-backend/internal/db_new"
 	protos "github.com/sschwartz96/syncapod-backend/internal/gen"
+	"github.com/sschwartz96/syncapod-backend/internal/util"
 	"github.com/stretchr/testify/require"
 	"github.com/twitchtv/twirp"
 )
@@ -18,15 +19,21 @@ import (
 var (
 	goTimeRSSURL = "https://changelog.com/gotime/feed"
 
-	testSeshAdmin = &db.SessionRow{ID: uuid.New(), UserID: testUser.ID, LoginTime: time.Now(), LastSeenTime: time.Now(), Expires: time.Now().Add(time.Hour), UserAgent: "testUserAgent"}
+	testSeshAdmin = db_new.Session{ID: util.PGUUID(uuid.New()),
+		UserID:       testUser.ID,
+		LoginTime:    util.PGFromTime(time.Now()),
+		LastSeenTime: util.PGFromTime(time.Now()),
+		Expires:      util.PGFromTime(time.Now().Add(time.Hour)),
+		UserAgent:    "testUserAgent",
+	}
 )
 
 func setupAdmin() error {
 	var err error
 
 	// insert user session to mimic user already authenticated
-	authStore := db.NewAuthStorePG(dbpg)
-	if err = authStore.InsertSession(context.Background(), testSeshAdmin); err != nil {
+	queries := db_new.New(dbpg)
+	if _, err = queries.InsertSession(context.Background(), db_new.InsertSessionParams(testSeshAdmin)); err != nil {
 		return fmt.Errorf("failed to insert user session: %v", err)
 	}
 	return nil
@@ -35,7 +42,8 @@ func setupAdmin() error {
 func Test_AdminGRPC(t *testing.T) {
 	// add metadata for authorization
 	header := make(http.Header)
-	header.Set(authTokenKey, testSesh.ID.String())
+	id, _ := util.StringFromPGUUID(testSesh.ID)
+	header.Set(authTokenKey, id)
 
 	ctx, err := twirp.WithHTTPRequestHeaders(context.Background(), header)
 	if err != nil {
