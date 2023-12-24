@@ -61,17 +61,17 @@ type Podcast struct {
 	Language    string
 	Category    []int32
 	Explicit    string
-	Author      pgtype.Text
-	LinkUrl     pgtype.Text
-	OwnerName   pgtype.Text
-	OwnerEmail  pgtype.Text
+	Author      string
+	LinkUrl     string
+	OwnerName   string
+	OwnerEmail  string
 	Episodic    pgtype.Bool
-	Copyright   pgtype.Text
+	Copyright   string
 	Block       pgtype.Bool
 	Complete    pgtype.Bool
 	PubDate     pgtype.Timestamptz
-	Keywords    pgtype.Text
-	Summary     pgtype.Text
+	Keywords    string
+	Summary     string
 	RssUrl      string
 }
 

@@ -53,7 +53,7 @@ func StartDockerDB(name string) (*pgxpool.Pool, func() error, error) {
 		return nil, nil, fmt.Errorf("StartDockerDB() error connecting: %v", err)
 	}
 	// run migrations
-	mig, err := migrate.New("file://../../migrations", pgURI)
+	mig, err := migrate.New("file://../../db/migrations", pgURI)
 	if err != nil {
 		log.Fatalf("couldn't create migrate struct : %v", err)
 	}

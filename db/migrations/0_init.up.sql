@@ -44,19 +44,19 @@ CREATE TABLE Podcasts (
 	category INTEGER[] NOT NULL,
 	explicit TEXT NOT NULL,
 	-- RECOMMENDED TAGS
-	author TEXT,
-	link_url TEXT,
-	owner_name TEXT,
-	owner_email TEXT,
+	author TEXT NOT NULL,
+	link_url TEXT NOT NUll,
+	owner_name TEXT NOT NUll,
+	owner_email TEXT NOT NUll,
 	-- SITUATIONAL TAGS
 	episodic BOOLEAN DEFAULT TRUE, 
-	copyright TEXT,
+	copyright TEXT NOT NUll,
 	block BOOLEAN,
 	complete BOOLEAN,
 	-- RSS/OTHER
 	pub_date TIMESTAMPTZ,
-	keywords TEXT,
-	summary TEXT,
+	keywords TEXT NOT NUll,
+	summary TEXT NOT NUll,
 	rss_url TEXT NOT NULL
 );
 
