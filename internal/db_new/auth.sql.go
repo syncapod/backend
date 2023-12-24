@@ -48,44 +48,34 @@ func (q *Queries) DeleteUser(ctx context.Context, id pgtype.UUID) error {
 }
 
 const getAccessTokenAndUser = `-- name: GetAccessTokenAndUser :one
-SELECT token, auth_code, refresh_token, user_id, a.created, expires, id, email, username, birthdate, password_hash, u.created, last_seen FROM AccessTokens a
-JOIN Users u ON a.user_id=u.id
-WHERE a.token=$1
+SELECT accesstokens.token, accesstokens.auth_code, accesstokens.refresh_token, accesstokens.user_id, accesstokens.created, accesstokens.expires, users.id, users.email, users.username, users.birthdate, users.password_hash, users.created, users.last_seen 
+FROM AccessTokens
+JOIN Users ON AccessTokens.user_id=Users.id
+WHERE AccessTokens.token=$1
 `
 
 type GetAccessTokenAndUserRow struct {
-	Token        []byte
-	AuthCode     []byte
-	RefreshToken []byte
-	UserID       pgtype.UUID
-	Created      pgtype.Timestamptz
-	Expires      int32
-	ID           pgtype.UUID
-	Email        string
-	Username     string
-	Birthdate    pgtype.Date
-	PasswordHash []byte
-	Created_2    pgtype.Timestamptz
-	LastSeen     pgtype.Timestamptz
+	Accesstoken Accesstoken
+	User        User
 }
 
 func (q *Queries) GetAccessTokenAndUser(ctx context.Context, token []byte) (GetAccessTokenAndUserRow, error) {
 	row := q.db.QueryRow(ctx, getAccessTokenAndUser, token)
 	var i GetAccessTokenAndUserRow
 	err := row.Scan(
-		&i.Token,
-		&i.AuthCode,
-		&i.RefreshToken,
-		&i.UserID,
-		&i.Created,
-		&i.Expires,
-		&i.ID,
-		&i.Email,
-		&i.Username,
-		&i.Birthdate,
-		&i.PasswordHash,
-		&i.Created_2,
-		&i.LastSeen,
+		&i.Accesstoken.Token,
+		&i.Accesstoken.AuthCode,
+		&i.Accesstoken.RefreshToken,
+		&i.Accesstoken.UserID,
+		&i.Accesstoken.Created,
+		&i.Accesstoken.Expires,
+		&i.User.ID,
+		&i.User.Email,
+		&i.User.Username,
+		&i.User.Birthdate,
+		&i.User.PasswordHash,
+		&i.User.Created,
+		&i.User.LastSeen,
 	)
 	return i, err
 }
@@ -320,7 +310,6 @@ func (q *Queries) InsertSession(ctx context.Context, arg InsertSessionParams) (S
 }
 
 const insertUser = `-- name: InsertUser :exec
-
 INSERT INTO Users (
 	id,email,username,birthdate,password_hash, created, last_seen
 ) VALUES (
@@ -338,7 +327,6 @@ type InsertUserParams struct {
 	LastSeen     pgtype.Timestamptz
 }
 
-// -- User ----
 func (q *Queries) InsertUser(ctx context.Context, arg InsertUserParams) error {
 	_, err := q.db.Exec(ctx, insertUser,
 		arg.ID,

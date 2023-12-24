@@ -1,5 +1,3 @@
----- User ----
-
 -- name: InsertUser :exec
 INSERT INTO Users (
 	id,email,username,birthdate,password_hash, created, last_seen
@@ -45,7 +43,6 @@ FROM Sessions
 JOIN Users ON Sessions.user_id = Users.id 
 WHERE Sessions.id = $1;
 
-
 -- name: InsertAuthCode :exec
 INSERT INTO AuthCodes (code,client_id,user_id,scope,expires)
 VALUES($1,$2,$3,$4,$5);
@@ -67,8 +64,9 @@ SELECT * FROM AccessTokens WHERE refresh_token=$1;
 DELETE FROM AccessTokens WHERE token=$1;
 
 -- name: GetAccessTokenAndUser :one
-SELECT * FROM AccessTokens a
-JOIN Users u ON a.user_id=u.id
-WHERE a.token=$1;
+SELECT sqlc.embed(AccessTokens), sqlc.embed(Users) 
+FROM AccessTokens
+JOIN Users ON AccessTokens.user_id=Users.id
+WHERE AccessTokens.token=$1;
 
 
