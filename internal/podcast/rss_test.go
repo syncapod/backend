@@ -7,13 +7,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sschwartz96/syncapod-backend/internal/db"
+	"github.com/sschwartz96/syncapod-backend/internal/db_new"
 	"github.com/stretchr/testify/require"
 )
 
 func Test_RSS(t *testing.T) {
-	podStore := db.NewPodcastStore(dbpg)
-	podController, err := NewPodController(podStore)
+	queries := db_new.New(dbpg)
+	podController, err := NewPodController(queries)
 	if err != nil {
 		t.Fatalf("Test_RSS error setting up: %v", err)
 	}
@@ -33,10 +33,10 @@ func Test_RSS(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Test_RSS() error adding new podcast: %v", err)
 	}
-	podID := &pod.ID
+	podID := pod.ID
 
 	// get the latest episode
-	epi, err := rssController.podController.FindLatestEpisode(context.Background(), *podID)
+	epi, err := rssController.podController.queries.FindLatestEpisode(context.Background(), podID)
 	if err != nil {
 		t.Fatalf("Test_RSS() error finding latest episode: %v", err)
 	}
@@ -56,12 +56,12 @@ func Test_RSS(t *testing.T) {
 	}
 
 	// find the latest, compare to previous latest
-	epi2, err := rssController.podController.FindLatestEpisode(context.Background(), *podID)
+	epi2, err := rssController.podController.queries.FindLatestEpisode(context.Background(), podID)
 	if err != nil {
 		t.Fatalf("Test_RSS() error finding latest episode(2): %v", err)
 	}
 	epi2.ID = epi.ID
-	require.Equal(t, *epi, *epi2)
+	require.Equal(t, epi, epi2)
 }
 
 func Test_parseDuration(t *testing.T) {

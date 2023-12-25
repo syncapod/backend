@@ -16,7 +16,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/sschwartz96/syncapod-backend/internal/auth"
 	"github.com/sschwartz96/syncapod-backend/internal/config"
-	"github.com/sschwartz96/syncapod-backend/internal/db"
 	"github.com/sschwartz96/syncapod-backend/internal/db_new"
 	"github.com/sschwartz96/syncapod-backend/internal/twirp"
 	"github.com/sschwartz96/syncapod-backend/internal/util"
@@ -76,12 +75,12 @@ func main() {
 	}
 
 	// setup stores
-	oauthStore := db.NewOAuthStorePG(pgdb)
-	podStore := db.NewPodcastStore(pgdb)
+	// oauthStore := db.NewOAuthStorePG(pgdb)
+	// podStore := db.NewPodcastStore(pgdb)
 
 	// setup controllers
-	authController := auth.NewAuthController(oauthStore, queries)
-	podController, err := podcast.NewPodController(podStore)
+	authController := auth.NewAuthController(queries)
+	podController, err := podcast.NewPodController(queries)
 	if err != nil {
 		log.Error("error setting up pod controller", util.Err(err))
 	}

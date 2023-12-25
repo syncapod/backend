@@ -8,6 +8,7 @@ import (
 	"github.com/sschwartz96/syncapod-backend/internal/db"
 	protos "github.com/sschwartz96/syncapod-backend/internal/gen"
 	"github.com/sschwartz96/syncapod-backend/internal/podcast"
+	"github.com/sschwartz96/syncapod-backend/internal/util"
 	"github.com/twitchtv/twirp"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -28,11 +29,11 @@ func (p *PodcastService) GetPodcast(ctx context.Context, req *protos.GetPodReq) 
 	if err != nil {
 		return nil, twirp.InvalidArgument.Errorf("Could not parse podcast id: %w", err)
 	}
-	dbPod, err := p.podCon.FindPodcastByID(ctx, pid)
+	dbPod, err := p.podCon.FindPodcastByID(ctx, util.PGUUID(pid))
 	if err != nil {
 		return nil, twirp.NotFound.Errorf("Could not find podcast error: %w", err)
 	}
-	pod, err := convertPodFromDB(dbPod, p.podCon)
+	pod, err := convertPodFromDB(&dbPod, p.podCon)
 	if err != nil {
 		return nil, twirp.Internal.Errorf("Error converting podcast model: %w", err)
 	}
@@ -48,11 +49,14 @@ func (p *PodcastService) GetEpisodes(ctx context.Context, req *protos.GetEpiReq)
 	if req.End == 0 {
 		req.End = 10
 	}
-	dbEpis, err := p.podCon.FindEpisodesByRange(ctx, podID, req.Start, req.End)
+	dbEpis, err := p.podCon.FindEpisodesByRange(ctx, util.PGUUID(podID), req.Start, req.End)
 	if err != nil {
 		return nil, twirp.Internal.Errorf("Could not find episodes by range: %w", err)
 	}
-	epis := convertEpisFromDB(dbEpis)
+	epis, err := convertEpisFromDB(dbEpis)
+	if err != nil {
+		return nil, twirp.Internal.Errorf("Could not convert episode from database: %w", err)
+	}
 	return &protos.Episodes{Episodes: epis}, nil
 }
 

@@ -1,5 +1,10 @@
+-- Extensions
+
+-- for uuid auto generation (EDIT NOT NEEDED)
+-- CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
 CREATE TABLE Users (
-	id UUID PRIMARY KEY,
+	id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 	email TEXT NOT NULL UNIQUE,
 	username TEXT NOT NULL UNIQUE,
 	birthdate DATE NOT NULL,
@@ -9,7 +14,7 @@ CREATE TABLE Users (
 );
 
 CREATE TABLE Sessions (
-	id UUID PRIMARY KEY,
+	id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 	user_id UUID NOT NULL REFERENCES Users(id) ON DELETE CASCADE,
 	login_time TIMESTAMPTZ NOT NULL,
 	last_seen_time TIMESTAMPTZ NOT NULL,
@@ -36,7 +41,7 @@ CREATE TABLE AccessTokens (
 
 CREATE TABLE Podcasts (
 	-- REQUIRED TAGS
-	id UUID PRIMARY KEY,
+	id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 	title TEXT NOT NULL,
 	description TEXT NOT NULL,
 	image_url TEXT NOT NULL,
@@ -54,7 +59,7 @@ CREATE TABLE Podcasts (
 	block BOOLEAN,
 	complete BOOLEAN,
 	-- RSS/OTHER
-	pub_date TIMESTAMPTZ,
+	pub_date TIMESTAMPTZ NOT NULL,
 	keywords TEXT NOT NUll,
 	summary TEXT NOT NUll,
 	rss_url TEXT NOT NULL
@@ -62,28 +67,28 @@ CREATE TABLE Podcasts (
 
 CREATE TABLE Episodes (
 	-- REQUIRED TAGS
-	id UUID PRIMARY KEY,
+	id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 	title TEXT NOT NULL,
 	enclosure_url TEXT NOT NULL,
 	enclosure_length BIGINT NOT NULL,
 	enclosure_type TEXT NOT NULL,
 	-- RECOMMENDED TAGS
-	pub_date TIMESTAMPTZ,
-	description TEXT,
-	duration BIGINT,
-	link_url TEXT,
-	image_url TEXT,
-	image_title TEXT,
-	explicit TEXT,
+	pub_date TIMESTAMPTZ NOT NULL,
+	description TEXT NOT NULL,
+	duration BIGINT NOT NULL,
+	link_url TEXT NOT NULL,
+	image_url TEXT NOT NULL,
+	image_title TEXT NOT NULL,
+	explicit TEXT NOT NULL,
 	-- SITUATIONAL TAGS
-	episode INT,
-	season INT,
-	episode_type TEXT, -- Full, Trailer, Bonus
+	episode INT NOT NULL,
+	season INT NOT NULL,
+	episode_type TEXT NOT NULL, -- Full, Trailer, Bonus
 	--	block BOOLEAN,
 	-- OTHER
-	subtitle TEXT,
-	summary TEXT,
-	encoded TEXT, -- this is the <content:encoded> which sometimes contains show notes
+	subtitle TEXT NOT NULL,
+	summary TEXT NOT NULL,
+	encoded TEXT NOT NULL, -- this is the <content:encoded> which sometimes contains show notes
 	podcast_id UUID NOT NULL REFERENCES Podcasts(id) ON DELETE CASCADE
 );
 
@@ -160,3 +165,6 @@ CREATE TRIGGER podcasts_search_trigger AFTER INSERT OR UPDATE ON podcasts
 	FOR EACH ROW EXECUTE FUNCTION podcasts_search_trigger();
 
 CREATE INDEX weighted_pod_idx ON podcasts_search USING GIN (search);
+
+-- Create index
+CREATE INDEX idx_pub_date ON Podcasts (pub_date);

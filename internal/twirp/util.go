@@ -14,7 +14,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func convertUserEpiFromDB(u *db.UserEpisode) *protos.UserEpisode {
+func convertUserEpiFromDB(u *db_new.Userepisode) *protos.UserEpisode {
 	return &protos.UserEpisode{
 		UserID:    u.UserID.String(),
 		EpisodeID: u.UserID.String(),
@@ -34,54 +34,66 @@ func convertUserFromDB(ur *db_new.User) *protos.User {
 	}
 }
 
-func convertPodFromDB(pr *db.Podcast, podCon *podcast.PodController) (*protos.Podcast, error) {
+func convertPodFromDB(pr *db_new.Podcast, podCon *podcast.PodController) (*protos.Podcast, error) {
 	cats, err := podCon.ConvertCategories(pr.Category)
 	if err != nil {
 		return nil, err
 	}
-	return dbPodToProto(pr, cats), nil
+	return dbPodToProto(pr, cats)
 }
 
-func dbPodToProto(pr *db.Podcast, cats []podcast.Category) *protos.Podcast {
+func dbPodToProto(pr *db_new.Podcast, cats []podcast.Category) (*protos.Podcast, error) {
+	id, err := uuid.ParseBytes(pr.ID.Bytes[:])
+	if err != nil {
+		return nil, err
+	}
 	return &protos.Podcast{
-		Id:            pr.ID.String(),
+		Id:            id.String(),
 		Title:         pr.Title,
 		Summary:       pr.Summary,
 		Author:        pr.Author,
 		Category:      podCatsToProtoCats(cats),
 		Explicit:      pr.Explicit,
-		Image:         &protos.Image{Url: pr.ImageURL},
+		Image:         &protos.Image{Url: pr.ImageUrl},
 		Keywords:      strings.Split(strings.ReplaceAll(pr.Keywords, " ", ""), ","),
 		Language:      pr.Language,
-		LastBuildDate: timestamppb.New(pr.PubDate), // TODO: proper build date?
-		Link:          pr.LinkURL,
-		PubDate:       timestamppb.New(pr.PubDate),
-		Rss:           pr.RSSURL,
-		Episodic:      pr.Episodic,
-	}
+		LastBuildDate: timestamppb.New(pr.PubDate.Time), // TODO: proper build date?
+		Link:          pr.LinkUrl,
+		PubDate:       timestamppb.New(pr.PubDate.Time),
+		Rss:           pr.RssUrl,
+		Episodic:      pr.Episodic.Bool,
+	}, nil
 }
 
-func convertEpiFromDB(er *db.Episode) *protos.Episode {
+func convertEpiFromDB(er *db_new.Episode) (*protos.Episode, error) {
+	id, err := uuid.ParseBytes(er.ID.Bytes[:])
+	if err != nil {
+		return nil, err
+	}
+	podID, err := uuid.ParseBytes(er.PodcastID.Bytes[:])
+	if err != nil {
+		return nil, err
+	}
 	return &protos.Episode{
-		Id:             er.ID.String(),
-		PodcastID:      er.PodcastID.String(),
+		Id:             id.String(),
+		PodcastID:      podID.String(),
 		Title:          er.Title,
 		Subtitle:       er.Subtitle,
 		EpisodeType:    er.EpisodeType,
-		Image:          &protos.Image{Title: er.ImageTitle, Url: er.ImageURL},
-		PubDate:        timestamppb.New(er.PubDate),
+		Image:          &protos.Image{Title: er.ImageTitle, Url: er.ImageUrl},
+		PubDate:        timestamppb.New(er.PubDate.Time),
 		Description:    er.Description,
 		Summary:        er.Summary,
 		Season:         int32(er.Season),
 		Episode:        int32(er.Episode),
 		Explicit:       er.Explicit,
-		MP3URL:         er.EnclosureURL,
+		MP3URL:         er.EnclosureUrl,
 		DurationMillis: er.Duration,
 		Encoded:        er.Encoded,
-	}
+	}, nil
 }
 
-func convertPodsFromDB(podCon *podcast.PodController, p []db.Podcast) ([]*protos.Podcast, error) {
+func convertPodsFromDB(podCon *podcast.PodController, p []db_new.Podcast) ([]*protos.Podcast, error) {
 	var err error
 	protoPods := make([]*protos.Podcast, len(p))
 	for i := range p {
@@ -93,12 +105,16 @@ func convertPodsFromDB(podCon *podcast.PodController, p []db.Podcast) ([]*protos
 	return protoPods, nil
 }
 
-func convertEpisFromDB(e []db.Episode) []*protos.Episode {
+func convertEpisFromDB(e []db_new.Episode) ([]*protos.Episode, error) {
+	var err error
 	protoEpis := make([]*protos.Episode, len(e))
 	for i := range e {
-		protoEpis[i] = convertEpiFromDB(&e[i])
+		protoEpis[i], err = convertEpiFromDB(&e[i])
+		if err != nil {
+			return nil, err
+		}
 	}
-	return protoEpis
+	return protoEpis, nil
 }
 
 func podCatsToProtoCats(podCats []podcast.Category) []*protos.Category {

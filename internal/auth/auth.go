@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/sschwartz96/syncapod-backend/internal/db"
 	"github.com/sschwartz96/syncapod-backend/internal/db_new"
 	"github.com/sschwartz96/syncapod-backend/internal/util"
@@ -29,13 +30,12 @@ type Auth interface {
 }
 
 type AuthController struct {
-	oauthStore db.OAuthStore
-	queries    *db_new.Queries
-	log        *slog.Logger
+	queries *db_new.Queries
+	log     *slog.Logger
 }
 
-func NewAuthController(oStore db.OAuthStore, queries *db_new.Queries) *AuthController {
-	return &AuthController{oauthStore: oStore, queries: queries}
+func NewAuthController(queries *db_new.Queries) *AuthController {
+	return &AuthController{queries: queries}
 }
 
 // Login queries db for user and validates password.
@@ -50,7 +50,7 @@ func (a *AuthController) Login(ctx context.Context, username, password, agent st
 		return nil, nil, fmt.Errorf("AuthController.Login() error incorrect password")
 	}
 
-	sessionInsertParams, err := createInsertSessionParams(user.ID.Bytes, agent)
+	sessionInsertParams, err := createInsertSessionParams(user.ID, agent)
 
 	if err != nil {
 		return nil, nil, fmt.Errorf("AuthController.Login() error creating session %v", err)
@@ -102,19 +102,13 @@ func (a *AuthController) Logout(ctx context.Context, sessionID uuid.UUID) error 
 	}
 	return nil
 }
-func (a *AuthController) CreateUser(ctx context.Context, email, username, pwd string, dob time.Time) (*db_new.InsertUserParams, error) {
+func (a *AuthController) CreateUser(ctx context.Context, email, username, pwd string, dob time.Time) (*db_new.User, error) {
 	pwdHash, err := hash(pwd)
 	if err != nil {
 		return nil, fmt.Errorf("AuthController.CreateUser() error hashing password: %v", err)
 	}
 
-	newUUID, err := util.PGNewUUID()
-	if err != nil {
-		return nil, fmt.Errorf("AuthController.CreateUser() error generating new UUID: %v", err)
-	}
-
-	newUser := db_new.InsertUserParams{
-		ID:           newUUID,
+	newUserParams := db_new.InsertUserParams{
 		Email:        email,
 		Username:     username,
 		Birthdate:    util.PGDateFromTime(dob),
@@ -122,8 +116,8 @@ func (a *AuthController) CreateUser(ctx context.Context, email, username, pwd st
 		Created:      util.PGNow(),
 		LastSeen:     util.PGNow(),
 	}
-	fmt.Println("uuid", slog.Any("user", newUser))
-	err = a.queries.InsertUser(ctx, newUser)
+
+	newUser, err := a.queries.InsertUser(ctx, newUserParams)
 	if err != nil {
 		return nil, fmt.Errorf("AuthController.CreateUser() error inserting user into db: %v", err)
 	}
@@ -162,18 +156,13 @@ func compare(hash []byte, password string) bool {
 }
 
 // createInsertSessionParams creates a InsertSessionParams object ready to be inserted
-func createInsertSessionParams(userID uuid.UUID, agent string) (*db_new.InsertSessionParams, error) {
-	newUUID, err := util.PGNewUUID()
-	if err != nil {
-		return nil, err
-	}
+func createInsertSessionParams(userID pgtype.UUID, agent string) (*db_new.InsertSessionParams, error) {
 	now := time.Now()
 	nowPG := util.PGFromTime(now)
 	expiresPG := util.PGFromTime(now.Add(time.Hour * 168))
 
 	return &db_new.InsertSessionParams{
-		ID:           newUUID,
-		UserID:       util.PGUUID(userID),
+		UserID:       userID,
 		Expires:      expiresPG,
 		LastSeenTime: nowPG,
 		LoginTime:    nowPG,

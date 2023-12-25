@@ -60,3 +60,10 @@ func StringFromPGUUID(id pgtype.UUID) (string, error) {
 	}
 	return newID.String(), nil
 }
+
+func PGBool(value bool) pgtype.Bool {
+	return pgtype.Bool{
+		Bool:  value,
+		Valid: true,
+	}
+}

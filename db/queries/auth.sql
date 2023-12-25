@@ -1,9 +1,10 @@
--- name: InsertUser :exec
+-- name: InsertUser :one
 INSERT INTO Users (
-	id,email,username,birthdate,password_hash, created, last_seen
+	email, username, birthdate, password_hash, created, last_seen
 ) VALUES (
-	$1,$2,$3,$4,$5,$6,$7
-);
+	$1,$2,$3,$4,$5,$6
+)
+RETURNING *;
 
 -- name: GetUserByID :one
 SELECT * FROM Users WHERE id=$1;
@@ -24,8 +25,8 @@ UPDATE Users SET password_hash=$1 WHERE id=$2;
 DELETE FROM Users WHERE id=$1;
 
 -- name: InsertSession :one
-INSERT INTO Sessions (id, user_id, login_time, last_seen_time, expires, user_agent) 
-VALUES($1, $2, $3, $4, $5, $6)
+INSERT INTO Sessions (user_id, login_time, last_seen_time, expires, user_agent) 
+VALUES($1, $2, $3, $4, $5)
 RETURNING *;
 
 -- name: GetSession :one

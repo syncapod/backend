@@ -38,18 +38,18 @@ type Episode struct {
 	EnclosureLength int64
 	EnclosureType   string
 	PubDate         pgtype.Timestamptz
-	Description     pgtype.Text
-	Duration        pgtype.Int8
-	LinkUrl         pgtype.Text
-	ImageUrl        pgtype.Text
-	ImageTitle      pgtype.Text
-	Explicit        pgtype.Text
-	Episode         pgtype.Int4
-	Season          pgtype.Int4
-	EpisodeType     pgtype.Text
-	Subtitle        pgtype.Text
-	Summary         pgtype.Text
-	Encoded         pgtype.Text
+	Description     string
+	Duration        int64
+	LinkUrl         string
+	ImageUrl        string
+	ImageTitle      string
+	Explicit        string
+	Episode         int32
+	Season          int32
+	EpisodeType     string
+	Subtitle        string
+	Summary         string
+	Encoded         string
 	PodcastID       pgtype.UUID
 }
 

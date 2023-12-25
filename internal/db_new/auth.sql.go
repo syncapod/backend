@@ -274,13 +274,12 @@ func (q *Queries) InsertAuthCode(ctx context.Context, arg InsertAuthCodeParams) 
 }
 
 const insertSession = `-- name: InsertSession :one
-INSERT INTO Sessions (id, user_id, login_time, last_seen_time, expires, user_agent) 
-VALUES($1, $2, $3, $4, $5, $6)
+INSERT INTO Sessions (user_id, login_time, last_seen_time, expires, user_agent) 
+VALUES($1, $2, $3, $4, $5)
 RETURNING id, user_id, login_time, last_seen_time, expires, user_agent
 `
 
 type InsertSessionParams struct {
-	ID           pgtype.UUID
 	UserID       pgtype.UUID
 	LoginTime    pgtype.Timestamptz
 	LastSeenTime pgtype.Timestamptz
@@ -290,7 +289,6 @@ type InsertSessionParams struct {
 
 func (q *Queries) InsertSession(ctx context.Context, arg InsertSessionParams) (Session, error) {
 	row := q.db.QueryRow(ctx, insertSession,
-		arg.ID,
 		arg.UserID,
 		arg.LoginTime,
 		arg.LastSeenTime,
@@ -309,16 +307,16 @@ func (q *Queries) InsertSession(ctx context.Context, arg InsertSessionParams) (S
 	return i, err
 }
 
-const insertUser = `-- name: InsertUser :exec
+const insertUser = `-- name: InsertUser :one
 INSERT INTO Users (
-	id,email,username,birthdate,password_hash, created, last_seen
+	email, username, birthdate, password_hash, created, last_seen
 ) VALUES (
-	$1,$2,$3,$4,$5,$6,$7
+	$1,$2,$3,$4,$5,$6
 )
+RETURNING id, email, username, birthdate, password_hash, created, last_seen
 `
 
 type InsertUserParams struct {
-	ID           pgtype.UUID
 	Email        string
 	Username     string
 	Birthdate    pgtype.Date
@@ -327,9 +325,8 @@ type InsertUserParams struct {
 	LastSeen     pgtype.Timestamptz
 }
 
-func (q *Queries) InsertUser(ctx context.Context, arg InsertUserParams) error {
-	_, err := q.db.Exec(ctx, insertUser,
-		arg.ID,
+func (q *Queries) InsertUser(ctx context.Context, arg InsertUserParams) (User, error) {
+	row := q.db.QueryRow(ctx, insertUser,
 		arg.Email,
 		arg.Username,
 		arg.Birthdate,
@@ -337,7 +334,17 @@ func (q *Queries) InsertUser(ctx context.Context, arg InsertUserParams) error {
 		arg.Created,
 		arg.LastSeen,
 	)
-	return err
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.Username,
+		&i.Birthdate,
+		&i.PasswordHash,
+		&i.Created,
+		&i.LastSeen,
+	)
+	return i, err
 }
 
 const updateSession = `-- name: UpdateSession :exec

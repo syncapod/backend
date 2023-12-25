@@ -13,8 +13,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/sschwartz96/syncapod-backend/internal/db"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/sschwartz96/syncapod-backend/internal/db_new"
 	"github.com/sschwartz96/syncapod-backend/internal/util"
 )
 
@@ -39,11 +39,17 @@ var tzMap = map[string]string{
 
 // UpdatePodcasts attempts to go through the list of podcasts update them via RSS feed
 func (c *RSSController) UpdatePodcasts() error {
-	var podcasts []db.Podcast
+	var podcasts []db_new.Podcast
 	var err error
+	var start, end int64
 	// just increments start and end indices
-	for start, end := 0, 10; ; start, end = end, end+10 {
-		podcasts, err = c.podController.FindPodcastsByRange(context.Background(), start, end)
+	for start, end = 0, 10; ; start, end = end, end+10 {
+		podcasts, err = c.podController.queries.FindPodcastsByRange(
+			context.Background(),
+			db_new.FindPodcastsByRangeParams{
+				Limit:  end - start,
+				Offset: start,
+			})
 		if err != nil || len(podcasts) == 0 {
 			break // will eventually break
 		}
@@ -70,9 +76,9 @@ func (c *RSSController) UpdatePodcasts() error {
 }
 
 // updatePodcast updates the given podcast via RSS feed
-func (c *RSSController) updatePodcast(pod *db.Podcast) error {
+func (c *RSSController) updatePodcast(pod *db_new.Podcast) error {
 	// get rss from url
-	rssResp, err := DownloadRSS(pod.RSSURL)
+	rssResp, err := DownloadRSS(pod.RssUrl)
 	if err != nil {
 		return fmt.Errorf("updatePodcast() error downloading rss: %v", err)
 	}
@@ -90,11 +96,11 @@ func (c *RSSController) updatePodcast(pod *db.Podcast) error {
 	}
 
 	for e := range newPod.Channel.Items {
-		epi := rssItemToDBEpisode(&newPod.Channel.Items[e], pod.ID, c.log)
+		insertEpisodeParams := rssItemToDBEpisode(&newPod.Channel.Items[e], pod.ID, c.log)
 		// check if the latest episode is in collection
-		exists := c.podController.DoesEpisodeExist(context.Background(), pod.ID, epi.EnclosureURL)
+		exists := c.podController.DoesEpisodeExist(context.Background(), pod.ID, insertEpisodeParams.EnclosureUrl)
 		if !exists {
-			err = c.podController.InsertEpisode(context.Background(), epi)
+			_, err = c.podController.queries.InsertEpisode(context.Background(), db_new.InsertEpisodeParams(*insertEpisodeParams))
 			if err != nil {
 				return fmt.Errorf("updatePodcast() error upserting episode: %v", err)
 			}
@@ -106,7 +112,7 @@ func (c *RSSController) updatePodcast(pod *db.Podcast) error {
 // AddNewPodcast takes RSS url and a reader to the RSS feed and
 // inserts the podcast and its episodes into the db
 // returns error if podcast already exists
-func (c *RSSController) AddNewPodcast(url string, r io.Reader) (*db.Podcast, error) {
+func (c *RSSController) AddNewPodcast(url string, r io.Reader) (*db_new.Podcast, error) {
 	// check if podcast already contains that rss url
 	exists := c.podController.DoesPodcastExist(context.Background(), url)
 	if exists {
@@ -118,26 +124,30 @@ func (c *RSSController) AddNewPodcast(url string, r io.Reader) (*db.Podcast, err
 	if err != nil {
 		return nil, err
 	}
-	pod, err := c.rssChannelToPodcast(&rssPod.Channel, uuid.New(), url)
+	newUUID, err := util.PGNewUUID()
+	if err != nil {
+		return nil, fmt.Errorf("AddNewPodcast() error generating uuid: %v", err)
+	}
+	insertPodParams, err := c.rssChannelToPodcast(&rssPod.Channel, newUUID, url)
 	if err != nil {
 		return nil, fmt.Errorf("AddNewPodcast() error converting rss: %v", err)
 	}
 
 	// insert podcast
-	err = c.podController.InsertPodcast(context.Background(), pod)
+	podcast, err := c.podController.queries.InsertPodcast(context.Background(), *insertPodParams)
 	if err != nil {
 		return nil, fmt.Errorf("AddNewPodcast() error adding new podcast: %v", err)
 	}
 
 	// loop through episodes and save them
 	for i := range rssPod.Channel.Items {
-		epi := rssItemToDBEpisode(&rssPod.Channel.Items[i], pod.ID, c.log)
-		err = c.podController.InsertEpisode(context.Background(), epi)
+		episodeInsertParams := rssItemToDBEpisode(&rssPod.Channel.Items[i], podcast.ID, c.log)
+		_, err := c.podController.queries.InsertEpisode(context.Background(), db_new.InsertEpisodeParams(*episodeInsertParams))
 		if err != nil {
 			c.log.Error("AddNewPodcast() couldn't insert episode: ", util.Err(err))
 		}
 	}
-	return pod, nil
+	return &podcast, nil
 }
 
 func DownloadRSS(url string) (io.ReadCloser, error) {
@@ -288,12 +298,12 @@ type rssItem struct {
 }
 
 type Category struct {
-	ID            int
+	ID            int32
 	Name          string     `xml:"text,attr"`
 	Subcategories []Category `xml:"category"`
 }
 
-func (c *RSSController) rssChannelToPodcast(r *rssChannel, id uuid.UUID, rssURL string) (*db.Podcast, error) {
+func (c *RSSController) rssChannelToPodcast(r *rssChannel, id pgtype.UUID, rssURL string) (*db_new.InsertPodcastParams, error) {
 	pubDate, err := parseRFC2822ToUTC(r.PubDate)
 	if err != nil {
 		c.log.Error("rssChannelToPodcast() error converting pubdate:", util.Err(err))
@@ -302,30 +312,29 @@ func (c *RSSController) rssChannelToPodcast(r *rssChannel, id uuid.UUID, rssURL 
 	if err != nil {
 		return nil, fmt.Errorf("rssChannelToPodcast() error translating categories: %v", err)
 	}
-	return &db.Podcast{
-		ID:          id,
+	return &db_new.InsertPodcastParams{
 		Title:       r.Title,
 		Description: r.Description,
-		ImageURL:    r.Image.Href,
+		ImageUrl:    r.Image.Href,
 		Language:    r.Language,
 		Category:    cats,
 		Explicit:    r.Explicit,
 		Author:      r.Author,
-		LinkURL:     r.Link,
+		LinkUrl:     r.Link,
 		OwnerName:   r.Owner.Name,
 		OwnerEmail:  r.Owner.Email,
-		Episodic:    r.Type == "episodic",
+		Episodic:    util.PGBool(r.Type == "episodic"),
 		Copyright:   r.Copyright,
-		Block:       strings.ToLower(r.Block) == "yes",
-		Complete:    strings.ToLower(r.Complete) == "yes",
-		PubDate:     *pubDate,
+		Block:       util.PGBool(strings.ToLower(r.Block) == "yes"),
+		Complete:    util.PGBool(strings.ToLower(r.Complete) == "yes"),
+		PubDate:     util.PGFromTime(*pubDate),
 		Keywords:    r.Keywords,
 		Summary:     r.Summary,
-		RSSURL:      rssURL,
+		RssUrl:      rssURL,
 	}, nil
 }
 
-func rssItemToDBEpisode(r *rssItem, podID uuid.UUID, log *slog.Logger) *db.Episode {
+func rssItemToDBEpisode(r *rssItem, podID pgtype.UUID, log *slog.Logger) *db_new.InsertEpisodeParams {
 	enclosureLen, err := strconv.ParseInt(r.Enclosure.Length, 10, 64)
 	if err != nil {
 		log.Error("rssItemToDBEpisode() error parsing enclosure length:", util.Err(err))
@@ -341,21 +350,20 @@ func rssItemToDBEpisode(r *rssItem, podID uuid.UUID, log *slog.Logger) *db.Episo
 	episode, _ := strconv.Atoi(r.Episode)
 	season, _ := strconv.Atoi(r.Season)
 
-	return &db.Episode{
-		ID:              uuid.New(),
+	return &db_new.InsertEpisodeParams{
 		Title:           r.Title,
-		EnclosureURL:    r.Enclosure.URL,
+		EnclosureUrl:    r.Enclosure.URL,
 		EnclosureLength: enclosureLen,
 		EnclosureType:   r.Enclosure.Type,
-		PubDate:         *pubDate,
+		PubDate:         util.PGFromTime(*pubDate),
 		Description:     r.Description,
 		Duration:        duration,
-		LinkURL:         r.Link,
-		ImageURL:        r.Image.Href,
+		LinkUrl:         r.Link,
+		ImageUrl:        r.Image.Href,
 		ImageTitle:      r.Image.Title,
 		Explicit:        r.Explicit,
-		Episode:         episode,
-		Season:          season,
+		Episode:         int32(episode),
+		Season:          int32(season),
 		EpisodeType:     r.EpisodeType,
 		Summary:         r.Summary,
 		Subtitle:        r.Subtitle,
