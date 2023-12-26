@@ -6,17 +6,17 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/sschwartz96/syncapod-backend/internal/db_new"
+	"github.com/sschwartz96/syncapod-backend/internal/db"
 	protos "github.com/sschwartz96/syncapod-backend/internal/gen"
 	"github.com/sschwartz96/syncapod-backend/internal/util"
 )
 
 type PodController struct {
-	queries  *db_new.Queries
+	queries  *db.Queries
 	catCache *CategoryCache
 }
 
-func NewPodController(queries *db_new.Queries) (*PodController, error) {
+func NewPodController(queries *db.Queries) (*PodController, error) {
 	cats, err := queries.FindAllCategories(context.Background())
 	if err != nil {
 		return nil, fmt.Errorf("NewPodController() error creating CategoryCache: %v", err)
@@ -38,7 +38,7 @@ func (c *PodController) DoesPodcastExist(ctx context.Context, rssURL string) boo
 func (c *PodController) DoesEpisodeExist(ctx context.Context, podID pgtype.UUID, mp3URL string) bool {
 	_, err := c.queries.FindEpisodeByURL(
 		ctx,
-		db_new.FindEpisodeByURLParams{
+		db.FindEpisodeByURLParams{
 			PodcastID:    podID,
 			EnclosureUrl: mp3URL,
 		})
@@ -61,7 +61,7 @@ func (c *PodController) FindPodcastByID(ctx context.Context, id string) (*protos
 
 func (c *PodController) FindEpisodesByRange(ctx context.Context, podID pgtype.UUID, start, end int64) ([]*protos.Episode, error) {
 	dbEpisodes, err := c.queries.FindEpisodesByRange(ctx,
-		db_new.FindEpisodesByRangeParams{
+		db.FindEpisodesByRangeParams{
 			PodcastID: podID,
 			Limit:     end - start,
 			Offset:    start,
@@ -84,7 +84,7 @@ func (c *PodController) FindUserEpisode(ctx context.Context, userID, epiID strin
 	if err != nil {
 		return nil, fmt.Errorf("FindUserEpisode error parsing episode uuid: %w", err)
 	}
-	dbUserEpisode, err := c.queries.FindUserEpisode(ctx, db_new.FindUserEpisodeParams{
+	dbUserEpisode, err := c.queries.FindUserEpisode(ctx, db.FindUserEpisodeParams{
 		UserID:    userPGUUID,
 		EpisodeID: episodePGUUID,
 	})
@@ -112,7 +112,7 @@ func (c *PodController) UpsertUserEpisode(ctx context.Context, userEpi *protos.U
 		return fmt.Errorf("UpsertUserEpisode error parsing episode uuid: %w", err)
 	}
 
-	err = c.queries.UpsertUserEpisode(ctx, db_new.UpsertUserEpisodeParams{
+	err = c.queries.UpsertUserEpisode(ctx, db.UpsertUserEpisodeParams{
 		UserID:       userID,
 		EpisodeID:    episodeID,
 		OffsetMillis: userEpi.Offset,
@@ -168,7 +168,7 @@ func (c *PodController) FindEpisodeNumber(ctx context.Context, podcastID string,
 	if err != nil {
 		return nil, fmt.Errorf("FindEpisodeNumber error on converting podcast id: %w", err)
 	}
-	dbEpisode, err := c.queries.FindEpisodeNumber(ctx, db_new.FindEpisodeNumberParams{
+	dbEpisode, err := c.queries.FindEpisodeNumber(ctx, db.FindEpisodeNumberParams{
 		PodcastID: podPGUUUID,
 		Episode:   int32(episodeNumber),
 	})

@@ -3,7 +3,7 @@
 //   sqlc v1.24.0
 // source: podcast.sql
 
-package db_new
+package db
 
 import (
 	"context"

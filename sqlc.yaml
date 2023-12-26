@@ -7,8 +7,8 @@ sql:
   engine: postgresql
   gen:
     go:
-      package: "db_new"
-      out: "internal/db_new"
+      package: "db"
+      out: "internal/db"
       sql_package: "pgx/v5"
   # The following lines are only required
   # if you're using managed databases with

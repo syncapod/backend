@@ -12,16 +12,16 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/sschwartz96/syncapod-backend/internal"
-	"github.com/sschwartz96/syncapod-backend/internal/db_new"
+	"github.com/sschwartz96/syncapod-backend/internal/db"
 	"github.com/sschwartz96/syncapod-backend/internal/util"
 	"github.com/stretchr/testify/require"
 )
 
 var (
 	dbpg                    *pgxpool.Pool
-	queries                 *db_new.Queries
-	getTestUser             db_new.User
-	getTestUserInsertParams = db_new.InsertUserParams{
+	queries                 *db.Queries
+	getTestUser             db.User
+	getTestUserInsertParams = db.InsertUserParams{
 		Email:     "get@test.auth",
 		Created:   util.PGNow(),
 		LastSeen:  util.PGNow(),
@@ -29,7 +29,7 @@ var (
 		Birthdate: util.PGDateFromTime(time.Unix(0, 0).UTC()),
 	}
 
-	getSesh, updateSesh, deleteSesh db_new.Session
+	getSesh, updateSesh, deleteSesh db.Session
 )
 
 // user TestMain to setup
@@ -42,7 +42,7 @@ func TestMain(m *testing.M) {
 	}
 
 	// setup store
-	queries = db_new.New(dbpg)
+	queries = db.New(dbpg)
 
 	// setup db
 	setupAuthDB()
@@ -61,7 +61,7 @@ func TestMain(m *testing.M) {
 
 func TestAuthController_Login(t *testing.T) {
 	type fields struct {
-		queries *db_new.Queries
+		queries *db.Queries
 	}
 	type args struct {
 		ctx      context.Context
@@ -73,7 +73,7 @@ func TestAuthController_Login(t *testing.T) {
 		name    string
 		fields  fields
 		args    args
-		want    db_new.User
+		want    db.User
 		wantErr bool
 	}{
 		{
@@ -109,7 +109,7 @@ func TestAuthController_Login(t *testing.T) {
 
 func TestAuthController_Authorize(t *testing.T) {
 	type fields struct {
-		queries *db_new.Queries
+		queries *db.Queries
 	}
 	type args struct {
 		ctx       context.Context
@@ -119,7 +119,7 @@ func TestAuthController_Authorize(t *testing.T) {
 		name    string
 		fields  fields
 		args    args
-		want    db_new.User
+		want    db.User
 		wantErr bool
 	}{
 		{
@@ -147,7 +147,7 @@ func TestAuthController_Authorize(t *testing.T) {
 
 func TestAuthController_Logout(t *testing.T) {
 	type fields struct {
-		queries *db_new.Queries
+		queries *db.Queries
 	}
 	type args struct {
 		ctx       context.Context
@@ -191,7 +191,7 @@ func TestAuthController_CreateUser(t *testing.T) {
 
 func TestAuthController_findUserByEmailOrUsername(t *testing.T) {
 	type fields struct {
-		queries *db_new.Queries
+		queries *db.Queries
 	}
 	type args struct {
 		ctx context.Context
@@ -201,7 +201,7 @@ func TestAuthController_findUserByEmailOrUsername(t *testing.T) {
 		name    string
 		fields  fields
 		args    args
-		want    db_new.User
+		want    db.User
 		wantErr bool
 	}{
 		{
@@ -241,7 +241,7 @@ func setupAuthDB() {
 
 	getTestUserInsertParams.PasswordHash = nil
 
-	updateUser := db_new.InsertUserParams{
+	updateUser := db.InsertUserParams{
 		Email:        "update@test.auth",
 		Username:     "updateAuth",
 		Birthdate:    util.PGDateFromTime(time.Unix(10001, 0).UTC()),
@@ -251,7 +251,7 @@ func setupAuthDB() {
 	}
 	insertUser(queries, updateUser)
 
-	updatePassUser := db_new.InsertUserParams{
+	updatePassUser := db.InsertUserParams{
 		Email:        "updatePass@test.auth",
 		Username:     "updatePassAuth",
 		Birthdate:    util.PGDateFromTime(time.Unix(10002, 0).UTC()),
@@ -261,7 +261,7 @@ func setupAuthDB() {
 	}
 	insertUser(queries, updatePassUser)
 
-	deleteUser := db_new.InsertUserParams{
+	deleteUser := db.InsertUserParams{
 		Email:        "delete@test.auth",
 		Username:     "deleteAuth",
 		Birthdate:    util.PGDateFromTime(time.Unix(10002, 0).UTC()),
@@ -272,40 +272,40 @@ func setupAuthDB() {
 	insertUser(queries, deleteUser)
 
 	// test sessions
-	getSeshParams := db_new.InsertSessionParams{UserID: getTestUser.ID,
+	getSeshParams := db.InsertSessionParams{UserID: getTestUser.ID,
 		Expires: util.PGFromTime(time.Now().Add(time.Hour)), LastSeenTime: util.PGFromTime(time.Unix(1000, 0)), LoginTime: util.PGFromTime(time.Unix(1000, 0)), UserAgent: "testAgent"}
 	getSesh = insertSession(queries, getSeshParams)
-	updateSeshParams := db_new.InsertSessionParams{UserID: getTestUser.ID,
+	updateSeshParams := db.InsertSessionParams{UserID: getTestUser.ID,
 		Expires: util.PGFromTime(time.Unix(1000, 0)), LastSeenTime: util.PGFromTime(time.Unix(1000, 0)), LoginTime: util.PGFromTime(time.Unix(1000, 0)), UserAgent: "testAgent"}
 	updateSesh = insertSession(queries, updateSeshParams)
-	deleteSeshParams := db_new.InsertSessionParams{UserID: getTestUser.ID,
+	deleteSeshParams := db.InsertSessionParams{UserID: getTestUser.ID,
 		Expires: util.PGFromTime(time.Unix(1000, 0)), LastSeenTime: util.PGFromTime(time.Unix(1000, 0)), LoginTime: util.PGFromTime(time.Unix(1000, 0)), UserAgent: "testAgent"}
 	deleteSesh = insertSession(queries, deleteSeshParams)
 
 	// test auth codes
 	gc, _ := DecodeKey("get_code")
-	getAuth := db_new.InsertAuthCodeParams{Code: gc, ClientID: "get_client", Scope: "get_scope", UserID: getTestUser.ID, Expires: util.PGFromTime(time.Now().Add(time.Minute * 5))}
+	getAuth := db.InsertAuthCodeParams{Code: gc, ClientID: "get_client", Scope: "get_scope", UserID: getTestUser.ID, Expires: util.PGFromTime(time.Now().Add(time.Minute * 5))}
 	insertAuthCode(queries, getAuth)
 	ec, _ := DecodeKey("expired_code")
-	expiredAuth := db_new.InsertAuthCodeParams{Code: ec, ClientID: "client", Scope: "scope", UserID: getTestUser.ID, Expires: util.PGFromTime(time.Now().Add(time.Minute * -5))}
+	expiredAuth := db.InsertAuthCodeParams{Code: ec, ClientID: "client", Scope: "scope", UserID: getTestUser.ID, Expires: util.PGFromTime(time.Now().Add(time.Minute * -5))}
 	insertAuthCode(queries, expiredAuth)
 	dc, _ := DecodeKey("delete_code")
-	deleteAuth := db_new.InsertAuthCodeParams{Code: dc, ClientID: "client", Scope: "scope", UserID: getTestUser.ID, Expires: util.PGFromTime(time.Now().Add(time.Minute * 5))}
+	deleteAuth := db.InsertAuthCodeParams{Code: dc, ClientID: "client", Scope: "scope", UserID: getTestUser.ID, Expires: util.PGFromTime(time.Now().Add(time.Minute * 5))}
 	insertAuthCode(queries, deleteAuth)
 
 	// test access tokens
 	tk, _ := DecodeKey("token")
 	rk, _ := DecodeKey("rftoken")
-	getAccessByRefresh := db_new.InsertAccessTokenParams{AuthCode: gc, Created: util.PGFromTime(time.Now()), Expires: 3600, RefreshToken: rk, Token: tk, UserID: getTestUser.ID}
+	getAccessByRefresh := db.InsertAccessTokenParams{AuthCode: gc, Created: util.PGFromTime(time.Now()), Expires: 3600, RefreshToken: rk, Token: tk, UserID: getTestUser.ID}
 	insertAccessToken(queries, getAccessByRefresh)
 	dtk, _ := DecodeKey("del_token")
 	drk, _ := DecodeKey("del_rftoken")
-	deleteToken := db_new.InsertAccessTokenParams{AuthCode: gc, Created: util.PGFromTime(time.Unix(1000, 0)), Expires: 3600, RefreshToken: drk, Token: dtk, UserID: getTestUser.ID}
+	deleteToken := db.InsertAccessTokenParams{AuthCode: gc, Created: util.PGFromTime(time.Unix(1000, 0)), Expires: 3600, RefreshToken: drk, Token: dtk, UserID: getTestUser.ID}
 	insertAccessToken(queries, deleteToken)
 }
 
 // insertUser is a helper function to insert the user or print failure
-func insertUser(queries *db_new.Queries, u db_new.InsertUserParams) db_new.User {
+func insertUser(queries *db.Queries, u db.InsertUserParams) db.User {
 	user, err := queries.InsertUser(context.Background(), u)
 	if err != nil {
 		log.Println("db.auth_test.insertUser() email:", u.Email)
@@ -314,7 +314,7 @@ func insertUser(queries *db_new.Queries, u db_new.InsertUserParams) db_new.User 
 	return user
 }
 
-func insertSession(queries *db_new.Queries, s db_new.InsertSessionParams) db_new.Session {
+func insertSession(queries *db.Queries, s db.InsertSessionParams) db.Session {
 	session, err := queries.InsertSession(context.Background(), s)
 	if err != nil {
 		log.Fatalln("db.auth_test.insertSession() error:", err)
@@ -322,13 +322,13 @@ func insertSession(queries *db_new.Queries, s db_new.InsertSessionParams) db_new
 	return session
 }
 
-func insertAuthCode(queries *db_new.Queries, a db_new.InsertAuthCodeParams) {
+func insertAuthCode(queries *db.Queries, a db.InsertAuthCodeParams) {
 	err := queries.InsertAuthCode(context.Background(), a)
 	if err != nil {
 		log.Fatalln("db.auth_test.insertAuthCode() error:", err)
 	}
 }
-func insertAccessToken(queries *db_new.Queries, a db_new.InsertAccessTokenParams) {
+func insertAccessToken(queries *db.Queries, a db.InsertAccessTokenParams) {
 	err := queries.InsertAccessToken(context.Background(), a)
 	if err != nil {
 		log.Fatalln("db.auth_test.insertAccessToken() error:", err)

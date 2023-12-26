@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/sschwartz96/syncapod-backend/internal/db_new"
+	"github.com/sschwartz96/syncapod-backend/internal/db"
 	protos "github.com/sschwartz96/syncapod-backend/internal/gen"
 	"github.com/sschwartz96/syncapod-backend/internal/util"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -16,7 +16,7 @@ import (
 
 func TestAuthController_CreateAuthCode(t *testing.T) {
 	type fields struct {
-		queries *db_new.Queries
+		queries *db.Queries
 	}
 	type args struct {
 		ctx      context.Context
@@ -57,11 +57,11 @@ func TestAuthController_CreateAuthCode(t *testing.T) {
 func TestAuthController_CreateAccessToken(t *testing.T) {
 	gc, _ := DecodeKey("get_code")
 	type fields struct {
-		queries *db_new.Queries
+		queries *db.Queries
 	}
 	type args struct {
 		ctx      context.Context
-		authCode *db_new.Authcode
+		authCode *db.Authcode
 	}
 	tests := []struct {
 		name    string
@@ -72,7 +72,7 @@ func TestAuthController_CreateAccessToken(t *testing.T) {
 		{
 			name: "valid",
 			args: args{ctx: context.Background(),
-				authCode: &db_new.Authcode{
+				authCode: &db.Authcode{
 					Code: gc, ClientID: "get_client",
 					Scope:  "get_scope",
 					UserID: getTestUser.ID,
@@ -102,7 +102,7 @@ func TestAuthController_ValidateAuthCode(t *testing.T) {
 	gc, _ := DecodeKey("get_code")
 	ec, _ := DecodeKey("expire_code")
 	type fields struct {
-		queries *db_new.Queries
+		queries *db.Queries
 	}
 	type args struct {
 		ctx  context.Context
@@ -112,14 +112,14 @@ func TestAuthController_ValidateAuthCode(t *testing.T) {
 		name    string
 		fields  fields
 		args    args
-		want    *db_new.Authcode
+		want    *db.Authcode
 		wantErr bool
 	}{
 		{
 			name:    "valid",
 			args:    args{ctx: context.Background(), code: EncodeKey(gc)},
 			fields:  fields{queries: queries},
-			want:    &db_new.Authcode{Code: gc, ClientID: "get_client", Scope: "get_scope", UserID: getTestUser.ID},
+			want:    &db.Authcode{Code: gc, ClientID: "get_client", Scope: "get_scope", UserID: getTestUser.ID},
 			wantErr: false,
 		},
 		{
@@ -152,7 +152,7 @@ func TestAuthController_ValidateAccessToken(t *testing.T) {
 	tk, _ := DecodeKey("token")
 	dtk, _ := DecodeKey("del_token")
 	type fields struct {
-		queries *db_new.Queries
+		queries *db.Queries
 	}
 	type args struct {
 		ctx   context.Context
@@ -202,7 +202,7 @@ func TestAuthController_ValidateRefreshToken(t *testing.T) {
 	rk, _ := DecodeKey("rftoken")
 	gc, _ := DecodeKey("get_code")
 	type fields struct {
-		queries *db_new.Queries
+		queries *db.Queries
 	}
 	type args struct {
 		ctx   context.Context
@@ -212,14 +212,14 @@ func TestAuthController_ValidateRefreshToken(t *testing.T) {
 		name    string
 		fields  fields
 		args    args
-		want    *db_new.Accesstoken
+		want    *db.Accesstoken
 		wantErr bool
 	}{
 		{
 			name:    "valid",
 			args:    args{ctx: context.Background(), token: EncodeKey(rk)},
 			fields:  fields{queries: queries},
-			want:    &db_new.Accesstoken{AuthCode: gc, Created: util.PGFromTime(time.Now()), Expires: 3600, RefreshToken: rk, Token: tk, UserID: getTestUser.ID},
+			want:    &db.Accesstoken{AuthCode: gc, Created: util.PGFromTime(time.Now()), Expires: 3600, RefreshToken: rk, Token: tk, UserID: getTestUser.ID},
 			wantErr: false,
 		},
 	}

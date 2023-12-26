@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/sschwartz96/syncapod-backend/internal/db_new"
+	"github.com/sschwartz96/syncapod-backend/internal/db"
 	protos "github.com/sschwartz96/syncapod-backend/internal/gen"
 	"github.com/sschwartz96/syncapod-backend/internal/util"
 	"github.com/stretchr/testify/require"
@@ -25,9 +25,9 @@ func setupAdmin() error {
 	var err error
 
 	// insert user session to mimic user already authenticated
-	queries := db_new.New(dbpg)
+	queries := db.New(dbpg)
 
-	testSeshAdminParams := db_new.InsertSessionParams{
+	testSeshAdminParams := db.InsertSessionParams{
 		UserID:       testUserID,
 		LoginTime:    util.PGFromTime(time.Now()),
 		LastSeenTime: util.PGFromTime(time.Now()),

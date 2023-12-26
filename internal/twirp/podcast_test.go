@@ -11,7 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/sschwartz96/syncapod-backend/internal/db_new"
+	"github.com/sschwartz96/syncapod-backend/internal/db"
 	protos "github.com/sschwartz96/syncapod-backend/internal/gen"
 	"github.com/sschwartz96/syncapod-backend/internal/podcast"
 	"github.com/sschwartz96/syncapod-backend/internal/util"
@@ -21,16 +21,16 @@ import (
 
 var (
 	testPodID, testSeshID pgtype.UUID
-	testEpi1, testEpi2    db_new.Episode
+	testEpi1, testEpi2    db.Episode
 )
 
 func setupPodDB() error {
 	// for podcast_test
 	var err error
-	queries := db_new.New(dbpg)
+	queries := db.New(dbpg)
 
-	testPod := db_new.InsertPodcastParams{Author: "Sam Schwartz", Description: "Syncapod Podcast", LinkUrl: "https://syncapod.com/podcast", ImageUrl: "http://syncapod.com/logo.png", Language: "en", Category: []int32{1, 2, 3}, Explicit: "clean", RssUrl: "https://syncapod.com/podcast.rss", PubDate: util.PGNow()}
-	testPod2 := db_new.InsertPodcastParams{Author: "Simon Schwartz", Description: "Syncapod Podcast 2", LinkUrl: "https://syncapod.com/podcast2", ImageUrl: "http://syncapod.com/logo.png", Language: "en", Category: []int32{1, 2, 3}, Explicit: "explicit", RssUrl: "https://syncapod.com/podcast2.rss", PubDate: util.PGNow()}
+	testPod := db.InsertPodcastParams{Author: "Sam Schwartz", Description: "Syncapod Podcast", LinkUrl: "https://syncapod.com/podcast", ImageUrl: "http://syncapod.com/logo.png", Language: "en", Category: []int32{1, 2, 3}, Explicit: "clean", RssUrl: "https://syncapod.com/podcast.rss", PubDate: util.PGNow()}
+	testPod2 := db.InsertPodcastParams{Author: "Simon Schwartz", Description: "Syncapod Podcast 2", LinkUrl: "https://syncapod.com/podcast2", ImageUrl: "http://syncapod.com/logo.png", Language: "en", Category: []int32{1, 2, 3}, Explicit: "explicit", RssUrl: "https://syncapod.com/podcast2.rss", PubDate: util.PGNow()}
 	pod1, err := queries.InsertPodcast(context.Background(), testPod)
 	if err != nil {
 		return fmt.Errorf("failed to insert podcast1: %v", err)
@@ -41,19 +41,19 @@ func setupPodDB() error {
 		return fmt.Errorf("failed to insert podcast2: %v", err)
 	}
 
-	testEpi1Params := db_new.InsertEpisodeParams{PodcastID: pod1.ID, Title: "Test Episode", Episode: 123, PubDate: util.PGFromTime(time.Unix(1000, 0))}
+	testEpi1Params := db.InsertEpisodeParams{PodcastID: pod1.ID, Title: "Test Episode", Episode: 123, PubDate: util.PGFromTime(time.Unix(1000, 0))}
 	testEpi1, err = queries.InsertEpisode(context.Background(), testEpi1Params)
 	if err != nil {
 		return fmt.Errorf("failed to insert episode: %v", err)
 	}
-	testEpi2Params := db_new.InsertEpisodeParams{PodcastID: pod1.ID, Title: "Test Episode 2", Episode: 124, PubDate: util.PGFromTime(time.Unix(1001, 0))}
+	testEpi2Params := db.InsertEpisodeParams{PodcastID: pod1.ID, Title: "Test Episode 2", Episode: 124, PubDate: util.PGFromTime(time.Unix(1001, 0))}
 	testEpi2, err = queries.InsertEpisode(context.Background(), testEpi2Params)
 	if err != nil {
 		return fmt.Errorf("failed to insert episode: %v", err)
 	}
 
-	testSub := db_new.InsertSubscriptionParams{UserID: testUserID, PodcastID: pod1.ID, CompletedIds: []pgtype.UUID{testEpi1.ID}, InProgressIds: []pgtype.UUID{testEpi2.ID}}
-	testSub2 := db_new.InsertSubscriptionParams{UserID: testUserID, PodcastID: pod2.ID, CompletedIds: []pgtype.UUID{}, InProgressIds: []pgtype.UUID{}}
+	testSub := db.InsertSubscriptionParams{UserID: testUserID, PodcastID: pod1.ID, CompletedIds: []pgtype.UUID{testEpi1.ID}, InProgressIds: []pgtype.UUID{testEpi2.ID}}
+	testSub2 := db.InsertSubscriptionParams{UserID: testUserID, PodcastID: pod2.ID, CompletedIds: []pgtype.UUID{}, InProgressIds: []pgtype.UUID{}}
 	if err = queries.InsertSubscription(context.Background(), testSub); err != nil {
 		return fmt.Errorf("failed to insert sub: %v", err)
 	}
@@ -61,14 +61,14 @@ func setupPodDB() error {
 		return fmt.Errorf("failed to insert sub: %v", err)
 	}
 
-	testUserEpi := db_new.UpsertUserEpisodeParams{EpisodeID: testEpi1.ID, UserID: testUserID, LastSeen: util.PGFromTime(time.Now()), OffsetMillis: 123456, Played: false}
+	testUserEpi := db.UpsertUserEpisodeParams{EpisodeID: testEpi1.ID, UserID: testUserID, LastSeen: util.PGFromTime(time.Now()), OffsetMillis: 123456, Played: false}
 	if err = queries.UpsertUserEpisode(context.Background(), testUserEpi); err != nil {
 		return fmt.Errorf("failed to insert user episode: %v", err)
 	}
 
 	// insert user session to mimic user already authenticated
-	insertTestSeshParams := db_new.InsertSessionParams{UserID: testUserID, LoginTime: util.PGNow(), LastSeenTime: util.PGNow(), Expires: util.PGFromTime(time.Now().Add(time.Hour)), UserAgent: "testUserAgent"}
-	testSesh, err := queries.InsertSession(context.Background(), db_new.InsertSessionParams(insertTestSeshParams))
+	insertTestSeshParams := db.InsertSessionParams{UserID: testUserID, LoginTime: util.PGNow(), LastSeenTime: util.PGNow(), Expires: util.PGFromTime(time.Now().Add(time.Hour)), UserAgent: "testUserAgent"}
+	testSesh, err := queries.InsertSession(context.Background(), db.InsertSessionParams(insertTestSeshParams))
 	if err != nil {
 		return fmt.Errorf("failed to insert user session: %v", err)
 	}
@@ -108,7 +108,7 @@ func Test_PodcastGRPC(t *testing.T) {
 		t.Fatalf("GetEpisodes() error: %v", err.Error())
 	}
 	require.Equal(t, 2, len(epis.Episodes))
-	podCon, err := podcast.NewPodController(db_new.New(dbpg))
+	podCon, err := podcast.NewPodController(db.New(dbpg))
 	if err != nil {
 		t.Fatalf("Error creating podcast controller to conver episode from database to protos: %v", err)
 	}

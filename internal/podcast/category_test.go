@@ -5,12 +5,12 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/sschwartz96/syncapod-backend/internal/db_new"
+	"github.com/sschwartz96/syncapod-backend/internal/db"
 	"github.com/stretchr/testify/require"
 )
 
 var catCache = newCategoryCache(
-	[]db_new.Category{
+	[]db.Category{
 		{ID: 0, ParentID: 0, Name: "nil"},
 		{ID: 1, ParentID: 0, Name: "News"},
 		{ID: 2, ParentID: 1, Name: "Tech News"},
@@ -20,7 +20,7 @@ var catCache = newCategoryCache(
 		{ID: 6, ParentID: 5, Name: "Baseball"},
 		{ID: 7, ParentID: 6, Name: "3rd Level"},
 	},
-	db_new.New(dbpg),
+	db.New(dbpg),
 )
 
 func TestCategoryController_LookupIDs(t *testing.T) {

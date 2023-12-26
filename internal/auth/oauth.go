@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/sschwartz96/syncapod-backend/internal/db_new"
+	"github.com/sschwartz96/syncapod-backend/internal/db"
 	protos "github.com/sschwartz96/syncapod-backend/internal/gen"
 	"github.com/sschwartz96/syncapod-backend/internal/util"
 )
@@ -24,19 +24,19 @@ const (
 )
 
 // CreateAuthCode creates and saves an authorization code with the client & user id
-func (a *AuthController) CreateAuthCode(ctx context.Context, userID uuid.UUID, clientID string) (*db_new.Authcode, error) {
+func (a *AuthController) CreateAuthCode(ctx context.Context, userID uuid.UUID, clientID string) (*db.Authcode, error) {
 	key, err := createKey(64)
 	if err != nil {
 		return nil, fmt.Errorf("CreateAuthorizationCode() error creating key: %v", err)
 	}
-	code := db_new.Authcode{
+	code := db.Authcode{
 		Code:     key,
 		ClientID: clientID,
 		UserID:   util.PGUUID(userID),
 		Scope:    string(ReadChange),
 		Expires:  util.PGFromTime(time.Now().Add(time.Minute * 5)),
 	}
-	err = a.queries.InsertAuthCode(ctx, db_new.InsertAuthCodeParams(code))
+	err = a.queries.InsertAuthCode(ctx, db.InsertAuthCodeParams(code))
 	if err != nil {
 		return nil, fmt.Errorf("AuthController.CreateAuthorizationCode() error inserting auth code: %v", err)
 	}
@@ -44,7 +44,7 @@ func (a *AuthController) CreateAuthCode(ctx context.Context, userID uuid.UUID, c
 }
 
 // CreateAccessToken creates and saves an access token with a year of validity
-func (a *AuthController) CreateAccessToken(ctx context.Context, authCode *db_new.Authcode) (*db_new.Accesstoken, error) {
+func (a *AuthController) CreateAccessToken(ctx context.Context, authCode *db.Authcode) (*db.Accesstoken, error) {
 	tokenString, err := createKey(64)
 	if err != nil {
 		return nil, fmt.Errorf("AuthController.CreateAccessToken() error creating access token: %v", err)
@@ -53,7 +53,7 @@ func (a *AuthController) CreateAccessToken(ctx context.Context, authCode *db_new
 	if err != nil {
 		return nil, fmt.Errorf("AuthController.CreateAccessToken() error creating access token: %v", err)
 	}
-	token := db_new.Accesstoken{
+	token := db.Accesstoken{
 		AuthCode:     authCode.Code,
 		Token:        tokenString,
 		RefreshToken: refreshTokenString,
@@ -61,14 +61,14 @@ func (a *AuthController) CreateAccessToken(ctx context.Context, authCode *db_new
 		Created:      util.PGFromTime(time.Now()),
 		Expires:      3600,
 	}
-	if err := a.queries.InsertAccessToken(ctx, db_new.InsertAccessTokenParams(token)); err != nil {
+	if err := a.queries.InsertAccessToken(ctx, db.InsertAccessTokenParams(token)); err != nil {
 		return nil, fmt.Errorf("AuthController.CreateAccessToken() error inserting access token: %v", err)
 	}
 	return &token, nil
 }
 
 // ValidateAuthCode takes in auth and queries db for
-func (a *AuthController) ValidateAuthCode(ctx context.Context, code string) (*db_new.Authcode, error) {
+func (a *AuthController) ValidateAuthCode(ctx context.Context, code string) (*db.Authcode, error) {
 	decodedCode, err := DecodeKey(code)
 	if err != nil {
 		return nil, fmt.Errorf("AuthController.ValidateAuthCode() error decoding code: %v", err)
@@ -107,7 +107,7 @@ func (a *AuthController) ValidateAccessToken(ctx context.Context, token string) 
 // ValidateRefreshToken takes in a refresh token, looks up access token and returns it.
 // Deletes the access token
 // returns error if refresh token is invalid
-func (a *AuthController) ValidateRefreshToken(ctx context.Context, token string) (*db_new.Accesstoken, error) {
+func (a *AuthController) ValidateRefreshToken(ctx context.Context, token string) (*db.Accesstoken, error) {
 	decodedTkn, err := DecodeKey(token)
 	if err != nil {
 		return nil, fmt.Errorf("AuthController.ValidateRefreshToken() error decoding key: %v", err)

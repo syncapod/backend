@@ -7,13 +7,13 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/sschwartz96/syncapod-backend/internal/db_new"
+	"github.com/sschwartz96/syncapod-backend/internal/db"
 	protos "github.com/sschwartz96/syncapod-backend/internal/gen"
 	"github.com/sschwartz96/syncapod-backend/internal/util"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func (c *PodController) convertUserEpiFromDB(u *db_new.Userepisode) (*protos.UserEpisode, error) {
+func (c *PodController) convertUserEpiFromDB(u *db.Userepisode) (*protos.UserEpisode, error) {
 	userID, err := util.StringFromPGUUID(u.UserID)
 	if err != nil {
 		return nil, fmt.Errorf("convertUserEpiFromDB error converting user id: %w", err)
@@ -31,7 +31,7 @@ func (c *PodController) convertUserEpiFromDB(u *db_new.Userepisode) (*protos.Use
 	}, nil
 }
 
-func (c *PodController) ConvertPodFromDB(pr *db_new.Podcast) (*protos.Podcast, error) {
+func (c *PodController) ConvertPodFromDB(pr *db.Podcast) (*protos.Podcast, error) {
 	cats, err := c.ConvertCategories(pr.Category)
 	if err != nil {
 		return nil, err
@@ -39,7 +39,7 @@ func (c *PodController) ConvertPodFromDB(pr *db_new.Podcast) (*protos.Podcast, e
 	return c.dbPodToProto(pr, cats)
 }
 
-func (c *PodController) dbPodToProto(pr *db_new.Podcast, cats []Category) (*protos.Podcast, error) {
+func (c *PodController) dbPodToProto(pr *db.Podcast, cats []Category) (*protos.Podcast, error) {
 	if !pr.ID.Valid {
 		return nil, errors.New("error podcast id is not valid")
 	}
@@ -61,7 +61,7 @@ func (c *PodController) dbPodToProto(pr *db_new.Podcast, cats []Category) (*prot
 	}, nil
 }
 
-func (c *PodController) ConvertEpiFromDB(er *db_new.Episode) (*protos.Episode, error) {
+func (c *PodController) ConvertEpiFromDB(er *db.Episode) (*protos.Episode, error) {
 	if !er.ID.Valid {
 		return nil, errors.New("error episode id is not valid")
 	}
@@ -87,7 +87,7 @@ func (c *PodController) ConvertEpiFromDB(er *db_new.Episode) (*protos.Episode, e
 	}, nil
 }
 
-func (c *PodController) convertPodsFromDB(p []db_new.Podcast) ([]*protos.Podcast, error) {
+func (c *PodController) convertPodsFromDB(p []db.Podcast) ([]*protos.Podcast, error) {
 	var err error
 	protoPods := make([]*protos.Podcast, len(p))
 	for i := range p {
@@ -99,7 +99,7 @@ func (c *PodController) convertPodsFromDB(p []db_new.Podcast) ([]*protos.Podcast
 	return protoPods, nil
 }
 
-func (c *PodController) convertEpisFromDB(e []db_new.Episode) ([]*protos.Episode, error) {
+func (c *PodController) convertEpisFromDB(e []db.Episode) ([]*protos.Episode, error) {
 	var err error
 	protoEpis := make([]*protos.Episode, len(e))
 	for i := range e {
@@ -126,7 +126,7 @@ func (c *PodController) podCatToProtoCat(podCat Category) *protos.Category {
 	}
 }
 
-func (c *PodController) convertSubFromDB(s []db_new.Subscription) ([]*protos.Subscription, error) {
+func (c *PodController) convertSubFromDB(s []db.Subscription) ([]*protos.Subscription, error) {
 
 	subs := []*protos.Subscription{}
 	for i := range s {

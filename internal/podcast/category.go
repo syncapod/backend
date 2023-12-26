@@ -8,19 +8,19 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sschwartz96/syncapod-backend/internal/db_new"
+	"github.com/sschwartz96/syncapod-backend/internal/db"
 )
 
 type CategoryCache struct {
-	dbCats  []db_new.Category // index represents id
+	dbCats  []db.Category // index represents id
 	codes   map[string]int32  // codes[key] = parentID; where key is generate by buildAncesterTree()
 	mutex   sync.RWMutex      // allows CategoryCache to be thread safe
-	queries *db_new.Queries
+	queries *db.Queries
 }
 
-func newCategoryCache(dbCats []db_new.Category, queries *db_new.Queries) *CategoryCache {
+func newCategoryCache(dbCats []db.Category, queries *db.Queries) *CategoryCache {
 	catCache := CategoryCache{
-		dbCats:  make([]db_new.Category, 0),
+		dbCats:  make([]db.Category, 0),
 		codes:   make(map[string]int32),
 		mutex:   sync.RWMutex{},
 		queries: queries,
@@ -119,7 +119,7 @@ func (c *CategoryCache) translateCategories(cats []Category, parentID int32, ids
 // returns error if database connection fails
 func (c *CategoryCache) addNewCategory(name string, parentID int32) error {
 	// construct new category
-	cat := db_new.Category{ID: int32(len(c.dbCats)), Name: name, ParentID: int32(parentID)}
+	cat := db.Category{ID: int32(len(c.dbCats)), Name: name, ParentID: int32(parentID)}
 	tree := c.buildAncesterTree(parentID, cat.Name)
 
 	// lock cache and update
@@ -131,7 +131,7 @@ func (c *CategoryCache) addNewCategory(name string, parentID int32) error {
 	// insert into db
 	ctx, cncFn := context.WithTimeout(context.Background(), time.Second*5)
 	defer cncFn()
-	err := c.queries.InsertCategory(ctx, db_new.InsertCategoryParams(cat))
+	err := c.queries.InsertCategory(ctx, db.InsertCategoryParams(cat))
 	if err != nil {
 		return fmt.Errorf("addNewCategory() error: %v", err)
 	}

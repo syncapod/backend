@@ -16,7 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/sschwartz96/syncapod-backend/internal/auth"
 	"github.com/sschwartz96/syncapod-backend/internal/config"
-	"github.com/sschwartz96/syncapod-backend/internal/db_new"
+	"github.com/sschwartz96/syncapod-backend/internal/db"
 	"github.com/sschwartz96/syncapod-backend/internal/twirp"
 	"github.com/sschwartz96/syncapod-backend/internal/util"
 
@@ -61,7 +61,7 @@ func main() {
 		os.Exit(2)
 	}
 
-	queries := db_new.New(pgdb)
+	queries := db.New(pgdb)
 
 	// run migrations
 	mig, err := migrate.New("file://"+cfg.MigrationsDir, pgURI)

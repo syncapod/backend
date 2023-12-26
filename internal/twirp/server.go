@@ -7,7 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/sschwartz96/syncapod-backend/internal/auth"
-	"github.com/sschwartz96/syncapod-backend/internal/db_new"
+	"github.com/sschwartz96/syncapod-backend/internal/db"
 	protos "github.com/sschwartz96/syncapod-backend/internal/gen"
 	"github.com/twitchtv/twirp"
 	"golang.org/x/crypto/acme/autocert"
@@ -159,7 +159,7 @@ type twirpHeaderKey struct{}
 
 type twirpCtxData struct {
 	authToken uuid.UUID
-	user      *db_new.User
+	user      *db.User
 }
 
 func (s *Server) Start() error {

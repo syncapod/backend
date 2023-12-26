@@ -7,12 +7,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sschwartz96/syncapod-backend/internal/db_new"
+	"github.com/sschwartz96/syncapod-backend/internal/db"
 	"github.com/stretchr/testify/require"
 )
 
 func Test_RSS(t *testing.T) {
-	queries := db_new.New(dbpg)
+	queries := db.New(dbpg)
 	podController, err := NewPodController(queries)
 	if err != nil {
 		t.Fatalf("Test_RSS error setting up: %v", err)

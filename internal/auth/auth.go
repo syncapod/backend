@@ -9,24 +9,24 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/sschwartz96/syncapod-backend/internal/db_new"
+	"github.com/sschwartz96/syncapod-backend/internal/db"
 	"github.com/sschwartz96/syncapod-backend/internal/util"
 	"golang.org/x/crypto/bcrypt"
 )
 
 type AuthController struct {
-	queries *db_new.Queries
+	queries *db.Queries
 	log     *slog.Logger
 }
 
-func NewAuthController(queries *db_new.Queries, log *slog.Logger) *AuthController {
+func NewAuthController(queries *db.Queries, log *slog.Logger) *AuthController {
 	return &AuthController{queries: queries, log: log}
 }
 
 // Login queries db for user and validates password.
 // On success, it creates session and inserts into db
 // returns error if user not found or password is invalid
-func (a *AuthController) Login(ctx context.Context, username, password, agent string) (*db_new.User, *db_new.Session, error) {
+func (a *AuthController) Login(ctx context.Context, username, password, agent string) (*db.User, *db.Session, error) {
 	user, err := a.findUserByEmailOrUsername(ctx, username)
 	if err != nil {
 		return nil, nil, fmt.Errorf("AuthController.Login() error finding user: %v", err)
@@ -52,7 +52,7 @@ func (a *AuthController) Login(ctx context.Context, username, password, agent st
 
 // Authorize queries db for session via id, validates and returns user info.
 // returns error if the session is not found or invalid
-func (a *AuthController) Authorize(ctx context.Context, sessionID uuid.UUID) (*db_new.User, error) {
+func (a *AuthController) Authorize(ctx context.Context, sessionID uuid.UUID) (*db.User, error) {
 	userSession, err := a.queries.GetSessionAndUser(ctx, util.PGUUID(sessionID))
 	if err != nil {
 		return nil, fmt.Errorf("AuthController.Authorize() error finding session: %v", err)
@@ -71,7 +71,7 @@ func (a *AuthController) Authorize(ctx context.Context, sessionID uuid.UUID) (*d
 	userSession.Session.LastSeenTime = util.PGFromTime(now)
 	userSession.Session.Expires = util.PGFromTime(now.Add(time.Hour * 168))
 	go func() {
-		err := a.queries.UpdateSession(context.Background(), db_new.UpdateSessionParams(userSession.Session))
+		err := a.queries.UpdateSession(context.Background(), db.UpdateSessionParams(userSession.Session))
 		if err != nil {
 			a.log.Warn("error updating session", util.Err(err))
 		}
@@ -87,13 +87,13 @@ func (a *AuthController) Logout(ctx context.Context, sessionID uuid.UUID) error 
 	}
 	return nil
 }
-func (a *AuthController) CreateUser(ctx context.Context, email, username, pwd string, dob time.Time) (*db_new.User, error) {
+func (a *AuthController) CreateUser(ctx context.Context, email, username, pwd string, dob time.Time) (*db.User, error) {
 	pwdHash, err := hash(pwd)
 	if err != nil {
 		return nil, fmt.Errorf("AuthController.CreateUser() error hashing password: %v", err)
 	}
 
-	newUserParams := db_new.InsertUserParams{
+	newUserParams := db.InsertUserParams{
 		Email:        email,
 		Username:     username,
 		Birthdate:    util.PGDateFromTime(dob),
@@ -112,8 +112,8 @@ func (a *AuthController) CreateUser(ctx context.Context, email, username, pwd st
 // findUserByEmailOrUsername is a helper method for login
 // takes in string u which could either be an email address or username
 // returns UserRow upon success
-func (a *AuthController) findUserByEmailOrUsername(ctx context.Context, u string) (*db_new.User, error) {
-	var user db_new.User
+func (a *AuthController) findUserByEmailOrUsername(ctx context.Context, u string) (*db.User, error) {
+	var user db.User
 	var err error
 	if strings.Contains(u, "@") {
 		user, err = a.queries.GetUserByEmail(ctx, u)
@@ -141,12 +141,12 @@ func compare(hash []byte, password string) bool {
 }
 
 // createInsertSessionParams creates a InsertSessionParams object ready to be inserted
-func createInsertSessionParams(userID pgtype.UUID, agent string) (*db_new.InsertSessionParams, error) {
+func createInsertSessionParams(userID pgtype.UUID, agent string) (*db.InsertSessionParams, error) {
 	now := time.Now()
 	nowPG := util.PGFromTime(now)
 	expiresPG := util.PGFromTime(now.Add(time.Hour * 168))
 
-	return &db_new.InsertSessionParams{
+	return &db.InsertSessionParams{
 		UserID:       userID,
 		Expires:      expiresPG,
 		LastSeenTime: nowPG,
