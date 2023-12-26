@@ -9,33 +9,18 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/sschwartz96/syncapod-backend/internal/db"
 	"github.com/sschwartz96/syncapod-backend/internal/db_new"
 	"github.com/sschwartz96/syncapod-backend/internal/util"
 	"golang.org/x/crypto/bcrypt"
 )
-
-type Auth interface {
-	// Syncapod
-	Login(ctx context.Context, username, password, agent string) (*db.UserRow, *db.SessionRow, error)
-	Authorize(ctx context.Context, sessionID uuid.UUID) (*db.UserRow, error)
-	Logout(ctx context.Context, sessionID uuid.UUID) error
-	CreateUser(ctx context.Context, email, username, pwd string, dob time.Time) (*db_new.InsertUserParams, error)
-	// OAuth
-	CreateAuthCode(ctx context.Context, userID uuid.UUID, clientID string) (*db.AuthCodeRow, error)
-	CreateAccessToken(ctx context.Context, authCode *db.AuthCodeRow) (*db.AccessTokenRow, error)
-	ValidateAuthCode(ctx context.Context, code string) (*db.AuthCodeRow, error)
-	ValidateAccessToken(ctx context.Context, token string) (*db.UserRow, error)
-	ValidateRefreshToken(ctx context.Context, token string) (*db.AccessTokenRow, error)
-}
 
 type AuthController struct {
 	queries *db_new.Queries
 	log     *slog.Logger
 }
 
-func NewAuthController(queries *db_new.Queries) *AuthController {
-	return &AuthController{queries: queries}
+func NewAuthController(queries *db_new.Queries, log *slog.Logger) *AuthController {
+	return &AuthController{queries: queries, log: log}
 }
 
 // Login queries db for user and validates password.

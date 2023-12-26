@@ -16,11 +16,9 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/sschwartz96/syncapod-backend/internal"
 	"github.com/sschwartz96/syncapod-backend/internal/auth"
-	"github.com/sschwartz96/syncapod-backend/internal/db"
 	"github.com/sschwartz96/syncapod-backend/internal/db_new"
 	"github.com/sschwartz96/syncapod-backend/internal/util"
 	"github.com/stretchr/testify/require"
@@ -39,7 +37,7 @@ func TestMain(t *testing.M) {
 	}
 
 	// create controllers
-	authC := auth.NewAuthController(db.NewOAuthStorePG(pgdb), db_new.New(pgdb))
+	authC := auth.NewAuthController(db_new.New(pgdb), slog.Default())
 
 	// create handlers
 	oauthHandler, err := createTestOAuthHandler(authC)
@@ -178,7 +176,7 @@ func createTestOAuthHandler(authC *auth.AuthController) (*OauthHandler, error) {
 
 func setup(pg *pgxpool.Pool) {
 	queries := db_new.New(pg)
-	insertUser(queries, db_new.InsertUserParams{ID: util.PGUUID(uuid.MustParse("b7f85a20-9b8f-47f9-8cee-a553a24f2b6d")),
+	insertUser(queries, db_new.InsertUserParams{
 		Birthdate: util.PGDateFromTime(time.Unix(0, 0)), Email: "oauthTest@test.com", Username: "oauthTest",
 		PasswordHash: []byte("$2a$10$bAkGU1SFc.oy9jz5/psXweSCqWG6reZr3Tl3oTKAgzBksPKHLG4bS"),
 		Created:      util.PGFromTime(time.Unix(0, 0)), LastSeen: util.PGFromTime(time.Unix(0, 0)),
@@ -186,9 +184,9 @@ func setup(pg *pgxpool.Pool) {
 }
 
 func insertUser(queries *db_new.Queries, u db_new.InsertUserParams) {
-	err := queries.InsertUser(context.Background(), u)
+	_, err := queries.InsertUser(context.Background(), u)
 	if err != nil {
-		fmt.Println("insertUser() id:", u.ID)
+		// fmt.Println("insertUser() id:", u.ID)
 		fmt.Println("insertUser() error:", err)
 		os.Exit(1)
 	}

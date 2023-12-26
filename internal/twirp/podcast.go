@@ -5,12 +5,10 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
-	"github.com/sschwartz96/syncapod-backend/internal/db"
 	protos "github.com/sschwartz96/syncapod-backend/internal/gen"
 	"github.com/sschwartz96/syncapod-backend/internal/podcast"
 	"github.com/sschwartz96/syncapod-backend/internal/util"
 	"github.com/twitchtv/twirp"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // PodcastService is the gRPC service for podcast
@@ -25,19 +23,11 @@ func NewPodcastService(podCon *podcast.PodController) *PodcastService {
 
 // GetPodcast returns a podcast via id
 func (p *PodcastService) GetPodcast(ctx context.Context, req *protos.GetPodReq) (*protos.Podcast, error) {
-	pid, err := uuid.Parse(req.Id)
-	if err != nil {
-		return nil, twirp.InvalidArgument.Errorf("Could not parse podcast id: %w", err)
-	}
-	dbPod, err := p.podCon.FindPodcastByID(ctx, util.PGUUID(pid))
+	podcast, err := p.podCon.FindPodcastByID(ctx, req.Id)
 	if err != nil {
 		return nil, twirp.NotFound.Errorf("Could not find podcast error: %w", err)
 	}
-	pod, err := convertPodFromDB(&dbPod, p.podCon)
-	if err != nil {
-		return nil, twirp.Internal.Errorf("Error converting podcast model: %w", err)
-	}
-	return pod, nil
+	return podcast, nil
 }
 
 // GetEpisodes returns a list of episodes via podcast id
@@ -49,13 +39,9 @@ func (p *PodcastService) GetEpisodes(ctx context.Context, req *protos.GetEpiReq)
 	if req.End == 0 {
 		req.End = 10
 	}
-	dbEpis, err := p.podCon.FindEpisodesByRange(ctx, util.PGUUID(podID), req.Start, req.End)
+	epis, err := p.podCon.FindEpisodesByRange(ctx, util.PGUUID(podID), req.Start, req.End)
 	if err != nil {
 		return nil, twirp.Internal.Errorf("Could not find episodes by range: %w", err)
-	}
-	epis, err := convertEpisFromDB(dbEpis)
-	if err != nil {
-		return nil, twirp.Internal.Errorf("Could not convert episode from database: %w", err)
 	}
 	return &protos.Episodes{Episodes: epis}, nil
 }
@@ -66,38 +52,16 @@ func (p *PodcastService) GetUserEpisode(ctx context.Context, req *protos.GetUser
 	if err != nil {
 		return nil, twirp.Unauthenticated.Error("User is not authenticated")
 	}
-	epiID, err := uuid.Parse(req.EpiID)
-	if err != nil {
-		return nil, twirp.InvalidArgument.Errorf("Could not parse episode uuid: %w", err)
-	}
-	dbUserEpi, err := p.podCon.FindUserEpisode(ctx, userID, epiID)
+	userEpi, err := p.podCon.FindUserEpisode(ctx, userID.String(), req.EpiID)
 	if err != nil {
 		return nil, twirp.Internal.Errorf("Could not retrieve user episode: %w", err)
 	}
-	return convertUserEpiFromDB(dbUserEpi), nil
+	return userEpi, nil
 }
 
 // UpsertUserEpisode updates the user playback metadata via episode id & user id
 func (p *PodcastService) UpsertUserEpisode(ctx context.Context, userEpiReq *protos.UserEpisode) (*protos.Response, error) {
-	userID, err := getUserIDFromContext(ctx)
-	if err != nil {
-		return nil, twirp.Unauthenticated.Error("User is not authenticated")
-	}
-	epiID, err := uuid.Parse(userEpiReq.EpisodeID)
-	if err != nil {
-		return nil, twirp.InvalidArgument.Error("Could not parse episode UUID")
-	}
-	if userEpiReq.LastSeen == nil {
-		userEpiReq.LastSeen = timestamppb.Now()
-	}
-	userEpi := &db.UserEpisode{
-		UserID:       userID,
-		EpisodeID:    epiID,
-		OffsetMillis: userEpiReq.Offset,
-		LastSeen:     userEpiReq.LastSeen.AsTime(),
-		Played:       userEpiReq.Played,
-	}
-	err = p.podCon.UpsertUserEpisode(ctx, userEpi)
+	err := p.podCon.UpsertUserEpisode(ctx, userEpiReq)
 	if err != nil {
 		return nil, twirp.Internal.Errorf("Error upserting UserEpisode: %w", err)
 	}
@@ -116,7 +80,7 @@ func (p *PodcastService) GetSubscriptions(ctx context.Context, req *protos.GetSu
 		return &protos.Subscriptions{}, nil
 	}
 
-	return &protos.Subscriptions{Subscriptions: convertSubFromDB(subs)}, nil
+	return subs, nil
 }
 
 // GetUserLastPlayed returns the last episode the user was playing & metadata
@@ -125,20 +89,7 @@ func (p *PodcastService) GetUserLastPlayed(ctx context.Context, req *protos.GetU
 	if err != nil {
 		return nil, fmt.Errorf("GetUserLastPlayed() error getting user id: %v", err)
 	}
-
-	userEpi, pod, epi, err := p.podCon.FindLastPlayed(ctx, userID)
-	if err != nil {
-		return nil, fmt.Errorf("GetUserLastPlayed() error: %v", err)
-	}
-	protoPod, err := convertPodFromDB(pod, p.podCon)
-	if err != nil {
-		return nil, twirp.InternalErrorf("Could not convert podcast model from DB: %w", err)
-	}
-	return &protos.LastPlayedRes{
-		Podcast: protoPod,
-		Episode: convertEpiFromDB(epi),
-		Millis:  userEpi.OffsetMillis,
-	}, nil
+	return p.podCon.FindLastPlayed(ctx, userID.String())
 }
 
 func getUserIDFromContext(ctx context.Context) (uuid.UUID, error) {

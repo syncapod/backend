@@ -2,19 +2,21 @@ package auth
 
 import (
 	"context"
+	"log/slog"
 	"reflect"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/sschwartz96/syncapod-backend/internal/db"
 	"github.com/sschwartz96/syncapod-backend/internal/db_new"
+	protos "github.com/sschwartz96/syncapod-backend/internal/gen"
+	"github.com/sschwartz96/syncapod-backend/internal/util"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func TestAuthController_CreateAuthCode(t *testing.T) {
 	type fields struct {
-		oauthStore db.OAuthStore
-		queries    *db_new.Queries
+		queries *db_new.Queries
 	}
 	type args struct {
 		ctx      context.Context
@@ -29,24 +31,22 @@ func TestAuthController_CreateAuthCode(t *testing.T) {
 	}{
 		{
 			name:    "valid",
-			args:    args{ctx: context.Background(), clientID: "oauthClient", userID: uuid.MustParse("a813c6e3-9cd0-4aed-9c4e-1d88ae20c8ba")},
-			fields:  fields{oauthStore: oauthStore, queries: queries},
+			args:    args{ctx: context.Background(), clientID: "oauthClient", userID: getTestUser.ID.Bytes},
+			fields:  fields{queries: queries},
 			wantErr: false,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			a := &AuthController{
-				oauthStore: tt.fields.oauthStore,
-				queries:    tt.fields.queries,
-			}
+			a := NewAuthController(tt.fields.queries, slog.Default())
+
 			got, err := a.CreateAuthCode(tt.args.ctx, tt.args.userID, tt.args.clientID)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("AuthController.CreateAuthCode() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 			// lookup in db
-			_, err = oauthStore.GetAuthCode(context.Background(), got.Code)
+			_, err = queries.GetAuthCode(context.Background(), got.Code)
 			if err != nil {
 				t.Errorf("AuthController.CreateAuthCode() error finding newly created auth code: %v", err)
 			}
@@ -57,12 +57,11 @@ func TestAuthController_CreateAuthCode(t *testing.T) {
 func TestAuthController_CreateAccessToken(t *testing.T) {
 	gc, _ := DecodeKey("get_code")
 	type fields struct {
-		oauthStore db.OAuthStore
-		queries    *db_new.Queries
+		queries *db_new.Queries
 	}
 	type args struct {
 		ctx      context.Context
-		authCode *db.AuthCodeRow
+		authCode *db_new.Authcode
 	}
 	tests := []struct {
 		name    string
@@ -71,24 +70,27 @@ func TestAuthController_CreateAccessToken(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name:    "valid",
-			args:    args{ctx: context.Background(), authCode: &db.AuthCodeRow{Code: gc, ClientID: "get_client", Scope: "get_scope", UserID: uuid.MustParse("a813c6e3-9cd0-4aed-9c4e-1d88ae20c8ba")}},
-			fields:  fields{oauthStore: oauthStore, queries: queries},
+			name: "valid",
+			args: args{ctx: context.Background(),
+				authCode: &db_new.Authcode{
+					Code: gc, ClientID: "get_client",
+					Scope:  "get_scope",
+					UserID: getTestUser.ID,
+				},
+			},
+			fields:  fields{queries: queries},
 			wantErr: false,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			a := &AuthController{
-				oauthStore: tt.fields.oauthStore,
-				queries:    tt.fields.queries,
-			}
+			a := NewAuthController(tt.fields.queries, slog.Default())
 			got, err := a.CreateAccessToken(tt.args.ctx, tt.args.authCode)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("AuthController.CreateAccessToken() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			_, _, err = oauthStore.GetAccessTokenAndUser(context.Background(), got.Token)
+			_, err = queries.GetAccessTokenAndUser(context.Background(), got.Token)
 			if err != nil {
 				t.Errorf("AuthController.CreateAccessToken() error finding newly created access token: %v", err)
 			}
@@ -100,8 +102,7 @@ func TestAuthController_ValidateAuthCode(t *testing.T) {
 	gc, _ := DecodeKey("get_code")
 	ec, _ := DecodeKey("expire_code")
 	type fields struct {
-		oauthStore db.OAuthStore
-		queries    *db_new.Queries
+		queries *db_new.Queries
 	}
 	type args struct {
 		ctx  context.Context
@@ -111,30 +112,27 @@ func TestAuthController_ValidateAuthCode(t *testing.T) {
 		name    string
 		fields  fields
 		args    args
-		want    *db.AuthCodeRow
+		want    *db_new.Authcode
 		wantErr bool
 	}{
 		{
 			name:    "valid",
 			args:    args{ctx: context.Background(), code: EncodeKey(gc)},
-			fields:  fields{oauthStore: oauthStore, queries: queries},
-			want:    &db.AuthCodeRow{Code: gc, ClientID: "get_client", Scope: "get_scope", UserID: uuid.MustParse("a813c6e3-9cd0-4aed-9c4e-1d88ae20c8ba")},
+			fields:  fields{queries: queries},
+			want:    &db_new.Authcode{Code: gc, ClientID: "get_client", Scope: "get_scope", UserID: getTestUser.ID},
 			wantErr: false,
 		},
 		{
 			name:    "expired",
 			args:    args{ctx: context.Background(), code: EncodeKey(ec)},
-			fields:  fields{oauthStore: oauthStore, queries: queries},
+			fields:  fields{queries: queries},
 			want:    nil,
 			wantErr: true,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			a := &AuthController{
-				oauthStore: tt.fields.oauthStore,
-				queries:    tt.fields.queries,
-			}
+			a := NewAuthController(tt.fields.queries, slog.Default())
 			got, err := a.ValidateAuthCode(tt.args.ctx, tt.args.code)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("AuthController.ValidateAuthCode() error = %v, wantErr %v", err, tt.wantErr)
@@ -154,8 +152,7 @@ func TestAuthController_ValidateAccessToken(t *testing.T) {
 	tk, _ := DecodeKey("token")
 	dtk, _ := DecodeKey("del_token")
 	type fields struct {
-		oauthStore db.OAuthStore
-		queries    *db_new.Queries
+		queries *db_new.Queries
 	}
 	type args struct {
 		ctx   context.Context
@@ -165,37 +162,34 @@ func TestAuthController_ValidateAccessToken(t *testing.T) {
 		name    string
 		fields  fields
 		args    args
-		want    *db.UserRow
+		want    *protos.User
 		wantErr bool
 	}{
 		{
 			name:    "valid",
 			args:    args{ctx: context.Background(), token: EncodeKey(tk)},
-			fields:  fields{oauthStore: oauthStore, queries: queries},
-			want:    &db.UserRow{ID: uuid.MustParse("a813c6e3-9cd0-4aed-9c4e-1d88ae20c8ba"), Email: "get@test.test", Username: "get", Birthdate: time.Unix(0, 0).UTC()},
+			fields:  fields{queries: queries},
+			want:    &protos.User{Id: uuid.UUID(getTestUser.ID.Bytes).String(), Email: "get@test.test", Username: "get", DOB: timestamppb.New(time.Unix(0, 0).UTC())},
 			wantErr: false,
 		},
 		{
 			name:    "expired",
 			args:    args{ctx: context.Background(), token: EncodeKey(dtk)},
-			fields:  fields{oauthStore: oauthStore, queries: queries},
+			fields:  fields{queries: queries},
 			want:    nil,
 			wantErr: true,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			a := &AuthController{
-				oauthStore: tt.fields.oauthStore,
-				queries:    tt.fields.queries,
-			}
+			a := NewAuthController(tt.fields.queries, slog.Default())
 			got, err := a.ValidateAccessToken(tt.args.ctx, tt.args.token)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("AuthController.ValidateAccessToken() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 			if got != nil {
-				if !reflect.DeepEqual(got.ID, tt.want.ID) {
+				if !reflect.DeepEqual(got.Id, tt.want.Id) {
 					t.Errorf("AuthController.ValidateAccessToken() = %v, want %v", got, tt.want)
 				}
 			}
@@ -208,8 +202,7 @@ func TestAuthController_ValidateRefreshToken(t *testing.T) {
 	rk, _ := DecodeKey("rftoken")
 	gc, _ := DecodeKey("get_code")
 	type fields struct {
-		oauthStore db.OAuthStore
-		queries    *db_new.Queries
+		queries *db_new.Queries
 	}
 	type args struct {
 		ctx   context.Context
@@ -219,23 +212,20 @@ func TestAuthController_ValidateRefreshToken(t *testing.T) {
 		name    string
 		fields  fields
 		args    args
-		want    *db.AccessTokenRow
+		want    *db_new.Accesstoken
 		wantErr bool
 	}{
 		{
 			name:    "valid",
 			args:    args{ctx: context.Background(), token: EncodeKey(rk)},
-			fields:  fields{oauthStore: oauthStore, queries: queries},
-			want:    &db.AccessTokenRow{AuthCode: gc, Created: time.Now(), Expires: 3600, RefreshToken: rk, Token: tk, UserID: uuid.MustParse("a813c6e3-9cd0-4aed-9c4e-1d88ae20c8ba")},
+			fields:  fields{queries: queries},
+			want:    &db_new.Accesstoken{AuthCode: gc, Created: util.PGFromTime(time.Now()), Expires: 3600, RefreshToken: rk, Token: tk, UserID: getTestUser.ID},
 			wantErr: false,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			a := &AuthController{
-				oauthStore: tt.fields.oauthStore,
-				queries:    tt.fields.queries,
-			}
+			a := NewAuthController(tt.fields.queries, slog.Default())
 			got, err := a.ValidateRefreshToken(tt.args.ctx, tt.args.token)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("AuthController.ValidateRefreshToken() error = %v, wantErr %v", err, tt.wantErr)

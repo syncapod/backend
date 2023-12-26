@@ -12,11 +12,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/sschwartz96/syncapod-backend/internal/auth"
-	"github.com/sschwartz96/syncapod-backend/internal/db"
+	protos "github.com/sschwartz96/syncapod-backend/internal/gen"
 	"github.com/sschwartz96/syncapod-backend/internal/podcast"
 	"github.com/sschwartz96/syncapod-backend/internal/util"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // Alexa intents events and directives
@@ -105,8 +105,8 @@ func (h *AlexaHandler) Alexa(res http.ResponseWriter, req *http.Request) {
 	h.log.Debug("request name of podcast", slog.String("name", name))
 
 	var response *AlexaResponseData
-	var pod *db.Podcast
-	var epi *db.Episode
+	var pod *protos.Podcast
+	var epi *protos.Episode
 	var offset int64
 
 	h.log.Debug("request name of intent", slog.String("intent", aData.Request.Intent.Name))
@@ -120,7 +120,7 @@ func (h *AlexaHandler) Alexa(res http.ResponseWriter, req *http.Request) {
 		}
 		// if the search came back with results defualt to first
 		if len(podcasts) > 0 {
-			pod = &podcasts[0]
+			pod = podcasts[0]
 			// either find latest episode or find the episode number
 			eNumStr := aData.Request.Intent.AlexaSlots.Episode.Value
 			if eNumStr != "" {
@@ -132,7 +132,7 @@ func (h *AlexaHandler) Alexa(res http.ResponseWriter, req *http.Request) {
 				}
 				h.log.Debug("alexa play request", slog.Int("episode number", epiNumber))
 
-				epi, err = h.pod.FindEpisodeNumber(req.Context(), pod.ID, 0, epiNumber)
+				epi, err = h.pod.FindEpisodeNumber(req.Context(), pod.Id, epiNumber)
 				if err != nil {
 					h.log.Warn("could not find episode with that number", slog.String("podcast title", pod.Title), slog.Int("episode number", epiNumber))
 					resText = "Could not find episode with that number, please try again."
@@ -140,7 +140,7 @@ func (h *AlexaHandler) Alexa(res http.ResponseWriter, req *http.Request) {
 				}
 			} else {
 				h.log.Debug("finding latest episode of", slog.String("podcast title", pod.Title))
-				epi, err = h.pod.FindLatestEpisode(req.Context(), pod.ID)
+				epi, err = h.pod.FindLatestEpisode(req.Context(), pod.Id)
 				if err != nil {
 					h.log.Warn("latest episode could not be found", slog.String("podcast title", pod.Title), util.Err(err))
 					resText = "Could not find episode, please try again."
@@ -168,15 +168,15 @@ func (h *AlexaHandler) Alexa(res http.ResponseWriter, req *http.Request) {
 		// TODO: add debug logging: slog.Debug("audioplayer tkn:", aData.Context.AudioPlayer.Token)
 		if len(audioTokens) > 1 {
 			//podID := uuid.MustParse(audioTokens[1])
-			epiID := uuid.MustParse(audioTokens[2])
+			epiID := audioTokens[2]
 			directive = DirStop
 			// TODO: handle error better back to user
 			go func() {
-				err := h.pod.PodcastStore.UpsertUserEpisode(
+				err := h.pod.UpsertUserEpisode(
 					context.Background(),
-					&db.UserEpisode{UserID: userObj.ID, EpisodeID: epiID,
-						OffsetMillis: aData.Context.AudioPlayer.OffsetInMilliseconds,
-						Played:       false,
+					&protos.UserEpisode{UserID: userObj.Id, EpisodeID: epiID,
+						Offset: aData.Context.AudioPlayer.OffsetInMilliseconds,
+						Played: false,
 					},
 				)
 				if err != nil {
@@ -190,22 +190,21 @@ func (h *AlexaHandler) Alexa(res http.ResponseWriter, req *http.Request) {
 	case Resume:
 		splitID := strings.Split(aData.Context.AudioPlayer.Token, ";")
 		if len(splitID) > 1 {
-			podID := uuid.MustParse(splitID[1])
-			epiID := uuid.MustParse(splitID[2])
+			podID := splitID[1]
+			epiID := splitID[2]
 			pod, err = h.pod.FindPodcastByID(req.Context(), podID)
 			if err != nil {
-				h.log.Warn("could not find podcast with given ID", slog.String("podcast id", podID.String()), util.Err(err))
+				h.log.Warn("could not find podcast with given ID", slog.String("podcast id", podID), util.Err(err))
 				resText = "Please try playing new podcast"
 				break
 			}
 			epi, err = h.pod.FindEpisodeByID(req.Context(), epiID)
 		} else {
 			// need to get episode and user episode
-			userEpi := &db.UserEpisode{}
-			userEpi, pod, epi, err = h.pod.FindLastPlayed(req.Context(), userObj.ID)
-			offset = userEpi.OffsetMillis
+			lastPlayedRes, err := h.pod.FindLastPlayed(req.Context(), userObj.Id)
+			offset = lastPlayedRes.Millis
 			if err != nil {
-				h.log.Warn("could not find podcast the user last played", slog.String("user id", userObj.ID.String()), util.Err(err))
+				h.log.Warn("could not find podcast the user last played", slog.String("user id", userObj.Id), util.Err(err))
 				resText = "Couldn't find any currently played podcast, please play new one"
 				break
 			}
@@ -234,18 +233,17 @@ func (h *AlexaHandler) Alexa(res http.ResponseWriter, req *http.Request) {
 				resText = "Playing " + pod.Title + ", " + epi.Title
 			}
 			if offset == 0 {
-				userEpi, err := h.pod.FindUserEpisode(req.Context(), userObj.ID, epi.ID)
+				userEpi, err := h.pod.FindUserEpisode(req.Context(), userObj.Id, epi.Id)
 				// either the userEpi was not found or there was an error
 				if err != nil {
 					offset = 0
 					// TODO: handle internal server error
 				} else {
-					offset = userEpi.OffsetMillis
+					offset = userEpi.Offset
 				}
 			}
 			h.log.Debug("alexa: play request", slog.Int64("offset", offset))
-			response = createAudioResponse(directive, userObj.ID.String(),
-				resText, pod, epi, offset)
+			response = createAudioResponse(directive, userObj.Id, resText, pod, epi, offset)
 		} else {
 			response = createPauseResponse(directive)
 		}
@@ -264,17 +262,17 @@ func (h *AlexaHandler) Alexa(res http.ResponseWriter, req *http.Request) {
 
 // moveAudio takes pointer to aData and bool for direction
 // returns pointers to podcast and episode, response text and offset in millis
-func (h *AlexaHandler) moveAudio(ctx context.Context, aData *AlexaData, forward bool) (*db.Podcast, *db.Episode, string, int64) {
-	var pod *db.Podcast
-	var epi *db.Episode
+func (h *AlexaHandler) moveAudio(ctx context.Context, aData *AlexaData, forward bool) (*protos.Podcast, *protos.Episode, string, int64) {
+	var pod *protos.Podcast
+	var epi *protos.Episode
 	var resText string
 	var offset int64
 	var err error
 
 	audioTokens := strings.Split(aData.Context.AudioPlayer.Token, ";")
 	if len(audioTokens) > 1 {
-		pID := uuid.MustParse(audioTokens[1])
-		eID := uuid.MustParse(audioTokens[2])
+		pID := audioTokens[1]
+		eID := audioTokens[2]
 
 		// find podcast
 		pod, err = h.pod.FindPodcastByID(ctx, pID)
@@ -318,8 +316,8 @@ func (h *AlexaHandler) moveAudio(ctx context.Context, aData *AlexaData, forward 
 			offset = 1
 		} else {
 			// check if we are trying to fast forward past end of episode
-			if epi.Duration < offset {
-				tilEnd := time.Duration(epi.Duration-curTime) * time.Millisecond
+			if epi.DurationMillis < offset {
+				tilEnd := time.Duration(epi.DurationMillis-curTime) * time.Millisecond
 				resText = "Cannot fast forward further than: " + durationToText(tilEnd)
 				offset = curTime
 			}
@@ -360,16 +358,16 @@ func durationToText(dur time.Duration) string {
 }
 
 func createAudioResponse(directive, userID, text string,
-	pod *db.Podcast, epi *db.Episode, offset int64) *AlexaResponseData {
+	pod *protos.Podcast, epi *protos.Episode, offset int64) *AlexaResponseData {
 
-	mp3URL := epi.EnclosureURL
+	mp3URL := epi.MP3URL
 	if !strings.Contains(mp3URL, "https") {
 		mp3URL = strings.Replace(mp3URL, "http", "https", 1)
 	}
 
-	imgURL := epi.ImageURL
+	imgURL := epi.Image.Url
 	if imgURL == "" {
-		imgURL = pod.ImageURL
+		imgURL = pod.Image.Url
 		if imgURL == "" {
 			// custom generic defualt image
 			// TODO: own custom image
@@ -387,7 +385,7 @@ func createAudioResponse(directive, userID, text string,
 					AudioItem: AlexaAudioItem{
 						Stream: AlexaStream{
 							URL:                  mp3URL,
-							Token:                userID + ";" + pod.ID.String() + ";" + epi.ID.String(),
+							Token:                userID + ";" + pod.Id + ";" + epi.Id,
 							OffsetInMilliseconds: offset,
 						},
 						Metadata: AlexaMetadata{
@@ -508,36 +506,39 @@ func (h *AlexaHandler) AudioEvent(res http.ResponseWriter, req *http.Request, bo
 		return
 	}
 
-	userID, err := uuid.Parse(uID)
-	if err != nil {
-		h.log.Error("error parsing user id", util.Err(err))
-		return
-	}
-
-	podID, err := uuid.Parse(pID)
-	if err != nil {
-		h.log.Error("error parsing podcast id", util.Err(err))
-		return
-	}
-
-	epiID, err := uuid.Parse(eID)
-	if err != nil {
-		h.log.Error("error parsing episode id", util.Err(err))
-		return
-	}
+	// userID, err := uuid.Parse(uID)
+	// if err != nil {
+	// 	h.log.Error("error parsing user id", util.Err(err))
+	// 	return
+	// }
+	//
+	// podID, err := uuid.Parse(pID)
+	// if err != nil {
+	// 	h.log.Error("error parsing podcast id", util.Err(err))
+	// 	return
+	// }
+	//
+	// epiID, err := uuid.Parse(eID)
+	// if err != nil {
+	// 	h.log.Error("error parsing episode id", util.Err(err))
+	// 	return
+	// }
 
 	h.log.Debug("audio event",
 		slog.String("name", data.Event.Header.Name),
-		slog.String("userID", userID.String()),
-		slog.String("podID", podID.String()),
-		slog.String("userID", epiID.String()),
+		slog.String("userID", uID),
+		slog.String("podID", pID),
+		slog.String("userID", eID),
 	)
 
 	switch data.Event.Header.Name {
 	case PlaybackNearlyFinished:
 		return
 	case PlaybackFinished:
-		err := h.pod.UpsertUserEpisode(req.Context(), &db.UserEpisode{EpisodeID: epiID, UserID: userID, Played: true, LastSeen: time.Unix(0, 0)})
+		err := h.pod.UpsertUserEpisode(
+			req.Context(),
+			&protos.UserEpisode{EpisodeID: eID, UserID: uID, Played: true, LastSeen: timestamppb.New(time.Unix(0, 0))},
+		)
 		if err != nil {
 			h.log.Error("failed to update the userEpi as played", util.Err(err))
 		}

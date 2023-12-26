@@ -26,13 +26,13 @@ var catCache = newCategoryCache(
 func TestCategoryController_LookupIDs(t *testing.T) {
 	tests := []struct {
 		name    string
-		ids     []int
+		ids     []int32
 		want    []Category
 		wantErr bool
 	}{
 		{
 			name: "valid/all",
-			ids:  []int{1, 2, 3, 4, 5, 6},
+			ids:  []int32{1, 2, 3, 4, 5, 6},
 			want: []Category{
 				{
 					ID:   1,
@@ -59,7 +59,7 @@ func TestCategoryController_LookupIDs(t *testing.T) {
 		},
 		{
 			name: "valid/news",
-			ids:  []int{1, 2, 3},
+			ids:  []int32{1, 2, 3},
 			want: []Category{
 				{
 					ID:   1,
@@ -91,8 +91,8 @@ func TestCategoryController_TranslateCategories(t *testing.T) {
 	tests := []struct {
 		name    string
 		cats    []Category
-		ids     []int
-		want    []int
+		ids     []int32
+		want    []int32
 		wantErr bool
 	}{
 		{
@@ -107,8 +107,8 @@ func TestCategoryController_TranslateCategories(t *testing.T) {
 					},
 				},
 			},
-			ids:  []int{},
-			want: []int{1, 2, 3},
+			ids:  []int32{},
+			want: []int32{1, 2, 3},
 		},
 		{
 			name: "valid/all",
@@ -134,8 +134,8 @@ func TestCategoryController_TranslateCategories(t *testing.T) {
 					},
 				},
 			},
-			ids:  []int{},
-			want: []int{1, 2, 3, 4, 5, 6},
+			ids:  []int32{},
+			want: []int32{1, 2, 3, 4, 5, 6},
 		},
 	}
 	for _, tt := range tests {

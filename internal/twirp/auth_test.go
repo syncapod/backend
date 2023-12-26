@@ -10,11 +10,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/sschwartz96/syncapod-backend/internal"
 	"github.com/sschwartz96/syncapod-backend/internal/auth"
-	"github.com/sschwartz96/syncapod-backend/internal/db"
 	"github.com/sschwartz96/syncapod-backend/internal/db_new"
 	protos "github.com/sschwartz96/syncapod-backend/internal/gen"
 	"github.com/sschwartz96/syncapod-backend/internal/podcast"
@@ -24,9 +23,9 @@ import (
 )
 
 var (
-	dbpg     *pgxpool.Pool
-	testUser = db_new.User{
-		ID:    util.PGUUID(uuid.MustParse("b921c6e3-9cd0-4aed-9c4e-1d88ae20c777")),
+	dbpg       *pgxpool.Pool
+	testUserID pgtype.UUID
+	testUser   = db_new.InsertUserParams{
 		Email: "user@twirp.test", Username: "user_twirp_test",
 		Birthdate:    util.PGDateFromTime(time.Unix(0, 0).UTC()),
 		PasswordHash: []byte("$2y$12$ndywn/c6wcB0oPv1ZRMLgeSQjTpXzOUCQy.5vdYvJxO9CS644i6Ce"),
@@ -57,8 +56,8 @@ func TestMain(m *testing.M) {
 		log.Fatalf("twirp.TestMain() error setting up db for admin: %v", err)
 	}
 
-	authController := auth.NewAuthController(db.NewOAuthStorePG(dbpg), db_new.New(dbpg))
-	podController, err := podcast.NewPodController(db.NewPodcastStore(dbpg))
+	authController := auth.NewAuthController(db_new.New(dbpg), slog.Default())
+	podController, err := podcast.NewPodController(db_new.New(dbpg))
 	if err != nil {
 		log.Fatalf("twirp.TestMain() error setting up PodController: %v", err)
 	}
@@ -93,10 +92,11 @@ func TestMain(m *testing.M) {
 
 func setupAuthDB() error {
 	queries := db_new.New(dbpg)
-	err := queries.InsertUser(context.Background(), db_new.InsertUserParams(testUser))
+	user, err := queries.InsertUser(context.Background(), testUser)
 	if err != nil {
 		return fmt.Errorf("failed to insert user: %v", err)
 	}
+	testUserID = user.ID
 	return nil
 }
 

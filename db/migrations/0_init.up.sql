@@ -107,12 +107,11 @@ CREATE TABLE Subscriptions (
 );
 
 CREATE TABLE UserEpisodes (
-	/* CANNOT ADD FOREIGN KEYS BECAUSE OF THEIR UNIQUE CONSTRAINT */
-	user_id UUID NOT NULL,
-	episode_id UUID NOT NULL,
-	offset_millis BIGINT,
-	last_seen TIMESTAMPTZ,
-	played BOOLEAN,
+	user_id UUID REFERENCES Users,
+	episode_id UUID REFERENCES Episodes,
+	offset_millis BIGINT NOT NULL DEFAULT 0,
+	last_seen TIMESTAMPTZ NOT NULL,
+	played BOOLEAN NOT NULL DEFAULT FALSE,
 	PRIMARY KEY(user_id,episode_id)
 );
 

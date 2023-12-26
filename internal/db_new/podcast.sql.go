@@ -209,106 +209,68 @@ func (q *Queries) FindEpisodesByRange(ctx context.Context, arg FindEpisodesByRan
 }
 
 const findLastPlayed = `-- name: FindLastPlayed :one
-SELECT user_id, episode_id, offset_millis, last_seen, played, episodes.id, episodes.title, enclosure_url, enclosure_length, enclosure_type, episodes.pub_date, episodes.description, duration, episodes.link_url, episodes.image_url, image_title, episodes.explicit, episode, season, episode_type, subtitle, episodes.summary, encoded, podcast_id, podcasts.id, podcasts.title, podcasts.description, podcasts.image_url, language, category, podcasts.explicit, author, podcasts.link_url, owner_name, owner_email, episodic, copyright, block, complete, podcasts.pub_date, keywords, podcasts.summary, rss_url FROM UserEpisodes
+SELECT userepisodes.user_id, userepisodes.episode_id, userepisodes.offset_millis, userepisodes.last_seen, userepisodes.played, episodes.id, episodes.title, episodes.enclosure_url, episodes.enclosure_length, episodes.enclosure_type, episodes.pub_date, episodes.description, episodes.duration, episodes.link_url, episodes.image_url, episodes.image_title, episodes.explicit, episodes.episode, episodes.season, episodes.episode_type, episodes.subtitle, episodes.summary, episodes.encoded, episodes.podcast_id, podcasts.id, podcasts.title, podcasts.description, podcasts.image_url, podcasts.language, podcasts.category, podcasts.explicit, podcasts.author, podcasts.link_url, podcasts.owner_name, podcasts.owner_email, podcasts.episodic, podcasts.copyright, podcasts.block, podcasts.complete, podcasts.pub_date, podcasts.keywords, podcasts.summary, podcasts.rss_url
+FROM UserEpisodes
 INNER JOIN Episodes ON UserEpisodes.episode_id=Episodes.id
 INNER JOIN Podcasts ON Episodes.podcast_id=Podcasts.id
 WHERE UserEpisodes.user_id=$1 
 ORDER BY UserEpisodes.last_seen DESC
+LIMIT 1
 `
 
 type FindLastPlayedRow struct {
-	UserID          pgtype.UUID
-	EpisodeID       pgtype.UUID
-	OffsetMillis    pgtype.Int8
-	LastSeen        pgtype.Timestamptz
-	Played          pgtype.Bool
-	ID              pgtype.UUID
-	Title           string
-	EnclosureUrl    string
-	EnclosureLength int64
-	EnclosureType   string
-	PubDate         pgtype.Timestamptz
-	Description     string
-	Duration        int64
-	LinkUrl         string
-	ImageUrl        string
-	ImageTitle      string
-	Explicit        string
-	Episode         int32
-	Season          int32
-	EpisodeType     string
-	Subtitle        string
-	Summary         string
-	Encoded         string
-	PodcastID       pgtype.UUID
-	ID_2            pgtype.UUID
-	Title_2         string
-	Description_2   string
-	ImageUrl_2      string
-	Language        string
-	Category        []int32
-	Explicit_2      string
-	Author          string
-	LinkUrl_2       string
-	OwnerName       string
-	OwnerEmail      string
-	Episodic        pgtype.Bool
-	Copyright       string
-	Block           pgtype.Bool
-	Complete        pgtype.Bool
-	PubDate_2       pgtype.Timestamptz
-	Keywords        string
-	Summary_2       string
-	RssUrl          string
+	Userepisode Userepisode
+	Episode     Episode
+	Podcast     Podcast
 }
 
 func (q *Queries) FindLastPlayed(ctx context.Context, userID pgtype.UUID) (FindLastPlayedRow, error) {
 	row := q.db.QueryRow(ctx, findLastPlayed, userID)
 	var i FindLastPlayedRow
 	err := row.Scan(
-		&i.UserID,
-		&i.EpisodeID,
-		&i.OffsetMillis,
-		&i.LastSeen,
-		&i.Played,
-		&i.ID,
-		&i.Title,
-		&i.EnclosureUrl,
-		&i.EnclosureLength,
-		&i.EnclosureType,
-		&i.PubDate,
-		&i.Description,
-		&i.Duration,
-		&i.LinkUrl,
-		&i.ImageUrl,
-		&i.ImageTitle,
-		&i.Explicit,
-		&i.Episode,
-		&i.Season,
-		&i.EpisodeType,
-		&i.Subtitle,
-		&i.Summary,
-		&i.Encoded,
-		&i.PodcastID,
-		&i.ID_2,
-		&i.Title_2,
-		&i.Description_2,
-		&i.ImageUrl_2,
-		&i.Language,
-		&i.Category,
-		&i.Explicit_2,
-		&i.Author,
-		&i.LinkUrl_2,
-		&i.OwnerName,
-		&i.OwnerEmail,
-		&i.Episodic,
-		&i.Copyright,
-		&i.Block,
-		&i.Complete,
-		&i.PubDate_2,
-		&i.Keywords,
-		&i.Summary_2,
-		&i.RssUrl,
+		&i.Userepisode.UserID,
+		&i.Userepisode.EpisodeID,
+		&i.Userepisode.OffsetMillis,
+		&i.Userepisode.LastSeen,
+		&i.Userepisode.Played,
+		&i.Episode.ID,
+		&i.Episode.Title,
+		&i.Episode.EnclosureUrl,
+		&i.Episode.EnclosureLength,
+		&i.Episode.EnclosureType,
+		&i.Episode.PubDate,
+		&i.Episode.Description,
+		&i.Episode.Duration,
+		&i.Episode.LinkUrl,
+		&i.Episode.ImageUrl,
+		&i.Episode.ImageTitle,
+		&i.Episode.Explicit,
+		&i.Episode.Episode,
+		&i.Episode.Season,
+		&i.Episode.EpisodeType,
+		&i.Episode.Subtitle,
+		&i.Episode.Summary,
+		&i.Episode.Encoded,
+		&i.Episode.PodcastID,
+		&i.Podcast.ID,
+		&i.Podcast.Title,
+		&i.Podcast.Description,
+		&i.Podcast.ImageUrl,
+		&i.Podcast.Language,
+		&i.Podcast.Category,
+		&i.Podcast.Explicit,
+		&i.Podcast.Author,
+		&i.Podcast.LinkUrl,
+		&i.Podcast.OwnerName,
+		&i.Podcast.OwnerEmail,
+		&i.Podcast.Episodic,
+		&i.Podcast.Copyright,
+		&i.Podcast.Block,
+		&i.Podcast.Complete,
+		&i.Podcast.PubDate,
+		&i.Podcast.Keywords,
+		&i.Podcast.Summary,
+		&i.Podcast.RssUrl,
 	)
 	return i, err
 }
@@ -322,9 +284,9 @@ ORDER BY last_seen DESC
 
 type FindLastUserEpiRow struct {
 	EpisodeID    pgtype.UUID
-	OffsetMillis pgtype.Int8
+	OffsetMillis int64
 	LastSeen     pgtype.Timestamptz
-	Played       pgtype.Bool
+	Played       bool
 }
 
 func (q *Queries) FindLastUserEpi(ctx context.Context, userID pgtype.UUID) (FindLastUserEpiRow, error) {
@@ -783,9 +745,9 @@ SET offset_millis=$3,last_seen=$4,played=$5
 type UpsertUserEpisodeParams struct {
 	UserID       pgtype.UUID
 	EpisodeID    pgtype.UUID
-	OffsetMillis pgtype.Int8
+	OffsetMillis int64
 	LastSeen     pgtype.Timestamptz
-	Played       pgtype.Bool
+	Played       bool
 }
 
 func (q *Queries) UpsertUserEpisode(ctx context.Context, arg UpsertUserEpisodeParams) error {

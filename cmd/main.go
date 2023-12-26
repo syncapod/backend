@@ -79,7 +79,7 @@ func main() {
 	// podStore := db.NewPodcastStore(pgdb)
 
 	// setup controllers
-	authController := auth.NewAuthController(queries)
+	authController := auth.NewAuthController(queries, log)
 	podController, err := podcast.NewPodController(queries)
 	if err != nil {
 		log.Error("error setting up pod controller", util.Err(err))
@@ -148,7 +148,7 @@ func main() {
 		if err != nil {
 			log.Error("failed to add debug podcast", util.Err(err))
 		}
-		log.Info("finished adding podcast", slog.String("podID", pod.ID.String()))
+		log.Info("finished adding podcast", slog.Any("podID", pod.ID))
 	}
 
 	// start server

@@ -75,11 +75,13 @@ WHERE user_id=$1
 ORDER BY last_seen DESC;
 
 -- name: FindLastPlayed :one
-SELECT * FROM UserEpisodes
+SELECT sqlc.embed(UserEpisodes), sqlc.embed(Episodes), sqlc.embed(Podcasts)
+FROM UserEpisodes
 INNER JOIN Episodes ON UserEpisodes.episode_id=Episodes.id
 INNER JOIN Podcasts ON Episodes.podcast_id=Podcasts.id
 WHERE UserEpisodes.user_id=$1 
-ORDER BY UserEpisodes.last_seen DESC;
+ORDER BY UserEpisodes.last_seen DESC
+LIMIT 1;
 
 -- name: InsertSubscription :exec
 INSERT INTO Subscriptions(user_id,podcast_id,completed_ids,in_progress_ids)

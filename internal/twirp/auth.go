@@ -32,7 +32,7 @@ func (a *AuthService) Authenticate(ctx context.Context, req *protos.Authenticate
 	}
 	return &protos.AuthenticateRes{
 		SessionKey: sessionKeyStr,
-		User:       convertUserFromDB(userRow),
+		User:       a.ac.ConvertUserFromDB(userRow),
 	}, nil
 }
 

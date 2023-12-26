@@ -46,6 +46,15 @@ func PGUUID(uuid uuid.UUID) pgtype.UUID {
 	return pgtype.UUID{Bytes: uuid, Valid: true}
 }
 
+func PGUUIDFromString(uuidStr string) (pgtype.UUID, error) {
+	uuid, err := uuid.Parse(uuidStr)
+	if err != nil {
+		return pgtype.UUID{}, err
+	}
+
+	return pgtype.UUID{Bytes: uuid, Valid: true}, nil
+}
+
 func UUIDFromPG(id pgtype.UUID) (uuid.UUID, error) {
 	if !id.Valid {
 		return uuid.UUID{}, errors.New("error pgtype.UUID is not valid")

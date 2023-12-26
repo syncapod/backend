@@ -110,7 +110,7 @@ type User struct {
 type Userepisode struct {
 	UserID       pgtype.UUID
 	EpisodeID    pgtype.UUID
-	OffsetMillis pgtype.Int8
+	OffsetMillis int64
 	LastSeen     pgtype.Timestamptz
-	Played       pgtype.Bool
+	Played       bool
 }

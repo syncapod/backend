@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/sschwartz96/syncapod-backend/internal/db_new"
+	protos "github.com/sschwartz96/syncapod-backend/internal/gen"
 	"github.com/sschwartz96/syncapod-backend/internal/util"
 )
 
@@ -83,7 +84,7 @@ func (a *AuthController) ValidateAuthCode(ctx context.Context, code string) (*db
 }
 
 // ValidateAccessToken takes pointer to dbclient and token string to lookup and validate AccessToken
-func (a *AuthController) ValidateAccessToken(ctx context.Context, token string) (*db_new.User, error) {
+func (a *AuthController) ValidateAccessToken(ctx context.Context, token string) (*protos.User, error) {
 	decodedTkn, err := DecodeKey(token)
 	if err != nil {
 		return nil, fmt.Errorf("AuthController.ValidateAccessToken() error decoding key: %v", err)
@@ -98,7 +99,9 @@ func (a *AuthController) ValidateAccessToken(ctx context.Context, token string) 
 		return nil, errors.New("AuthController.ValidateAccessToken() error: expired access token")
 	}
 	userAndToken.User.PasswordHash = []byte{}
-	return &userAndToken.User, nil
+
+	user := a.ConvertUserFromDB(&userAndToken.User)
+	return user, nil
 }
 
 // ValidateRefreshToken takes in a refresh token, looks up access token and returns it.

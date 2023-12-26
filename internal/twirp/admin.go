@@ -33,7 +33,7 @@ func (a *AdminService) AddPodcast(ctx context.Context, req *protos.AddPodReq) (*
 	if err != nil {
 		return nil, status.Error(codes.Internal, "error AddNewPodcast(): "+err.Error())
 	}
-	protoPod, err := convertPodFromDB(pod, a.podCon)
+	protoPod, err := a.podCon.ConvertPodFromDB(pod)
 	if err != nil {
 		return nil, status.Error(codes.Internal, "error converting db pod to proto pod: "+err.Error())
 	}
