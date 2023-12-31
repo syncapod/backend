@@ -10,8 +10,10 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/sschwartz96/syncapod-backend/internal/auth"
+	"github.com/sschwartz96/syncapod-backend/internal/config"
 	"github.com/sschwartz96/syncapod-backend/internal/util"
 )
 
@@ -25,12 +27,12 @@ type OauthHandler struct {
 }
 
 // CreateOauthHandler just intantiates an OauthHandler
-func CreateOauthHandler(authController *auth.AuthController, clients map[string]string, log *slog.Logger) (*OauthHandler, error) {
-	loginT, err := template.ParseFiles("./templates/oauth/login.gohtml")
+func CreateOauthHandler(cfg *config.Config, authController *auth.AuthController, clients map[string]string, log *slog.Logger) (*OauthHandler, error) {
+	loginT, err := template.ParseFiles(cfg.TemplatesDir + "/oauth/login.gohtml")
 	if err != nil {
 		return nil, err
 	}
-	authT, err := template.ParseFiles("./templates/oauth/auth.gohtml")
+	authT, err := template.ParseFiles(cfg.TemplatesDir + "/oauth/auth.gohtml")
 	if err != nil {
 		return nil, err
 	}
@@ -43,28 +45,31 @@ func CreateOauthHandler(authController *auth.AuthController, clients map[string]
 	}, nil
 }
 
-func (h *OauthHandler) ServeHTTP(res http.ResponseWriter, req *http.Request) {
-	// path: /oauth/*
-	var head string
-	head = ""
-	switch head {
-	case "login":
-		h.Login(res, req)
-	case "authorize":
-		h.Authorize(res, req)
-	case "token":
-		h.Token(res, req)
-	}
+func (h *OauthHandler) Routes() chi.Router {
+	// to be mounted at /oauth
+	router := chi.NewRouter()
+
+	router.Get("/login", h.LoginGet)
+	router.Post("/login", h.LoginPost)
+
+	router.Get("/authorize", h.AuthorizeGet)
+	router.Post("/authorize", h.AuthorizePost)
+
+	router.Post("/token", h.TokenPost)
+
+	return router
 }
 
-// Login handles the post and get request of a login page
-func (h *OauthHandler) Login(res http.ResponseWriter, req *http.Request) {
-	if req.Method == http.MethodGet {
-		if err := h.loginTemplate.Execute(res, false); err != nil {
-			h.log.Error("oauth login error executing loginTemplate", util.Err(err))
-		}
-		return
+// LoginGet handles the get request of a login page
+func (h *OauthHandler) LoginGet(res http.ResponseWriter, req *http.Request) {
+	if err := h.loginTemplate.Execute(res, false); err != nil {
+		h.log.Error("oauth login error executing loginTemplate", util.Err(err))
 	}
+	// TODO: send 500 internal error page
+}
+
+// LoginPost handles the post and request of a login page submission
+func (h *OauthHandler) LoginPost(res http.ResponseWriter, req *http.Request) {
 	err := req.ParseForm()
 	if err != nil {
 		h.log.Debug("could not parse form values", util.Err(err))
@@ -99,16 +104,17 @@ func (h *OauthHandler) Login(res http.ResponseWriter, req *http.Request) {
 	http.Redirect(res, req, "/oauth/authorize"+"?"+values.Encode(), http.StatusSeeOther)
 }
 
-// Authorize takes a session(access) token and validates it and sents back user info
-func (h *OauthHandler) Authorize(res http.ResponseWriter, req *http.Request) {
-	if req.Method == http.MethodGet {
-		err := h.authTemplate.Execute(res, nil)
-		if err != nil {
-			h.log.Error("oauth authorize error executing template", util.Err(err))
-		}
-		return
+// AuthorizeGet handles rendering oauth authorize template
+func (h *OauthHandler) AuthorizeGet(res http.ResponseWriter, req *http.Request) {
+	err := h.authTemplate.Execute(res, nil)
+	if err != nil {
+		h.log.Error("oauth authorize error executing template", util.Err(err))
 	}
+	// TODO: send 500 internal page
+}
 
+// AuthorizePost receives a POST and retrieves a session(access) token, validates it and sents back user info
+func (h *OauthHandler) AuthorizePost(res http.ResponseWriter, req *http.Request) {
 	// setup redirect url
 	redirectURI := strings.TrimSpace(req.URL.Query().Get("redirect_uri"))
 	// add query params
@@ -150,7 +156,7 @@ func (h *OauthHandler) Authorize(res http.ResponseWriter, req *http.Request) {
 }
 
 // Token handles authenticating the oauth client with the given token
-func (h *OauthHandler) Token(res http.ResponseWriter, req *http.Request) {
+func (h *OauthHandler) TokenPost(res http.ResponseWriter, req *http.Request) {
 	// authenticate client as per RFC 6749 2.3.1.
 	id, secret, ok := req.BasicAuth()
 	if !ok {

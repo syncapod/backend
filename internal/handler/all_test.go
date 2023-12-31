@@ -13,13 +13,14 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-	"text/template"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/sschwartz96/syncapod-backend/internal"
 	"github.com/sschwartz96/syncapod-backend/internal/auth"
+	"github.com/sschwartz96/syncapod-backend/internal/config"
 	"github.com/sschwartz96/syncapod-backend/internal/db"
+	"github.com/sschwartz96/syncapod-backend/internal/podcast"
 	"github.com/sschwartz96/syncapod-backend/internal/util"
 	"github.com/stretchr/testify/require"
 )
@@ -39,12 +40,15 @@ func TestMain(t *testing.M) {
 	// create controllers
 	authC := auth.NewAuthController(db.New(pgdb), slog.Default())
 
-	// create handlers
-	oauthHandler, err := createTestOAuthHandler(authC)
+	// create handler
+	testHandler, err = CreateHandler(
+		&config.Config{TemplatesDir: "../../templates/", AlexaClientID: "testClientID", AlexaSecret: "testClientSecret"},
+		authC, &podcast.PodController{},
+		slog.Default(),
+	)
 	if err != nil {
-		log.Fatalf("Handler.TestMain() error creating oauthHandler: %v", err)
+		log.Fatalf("Handler.TestMain() error creating handler: %v", err)
 	}
-	testHandler = &Handler{oauthHandler: oauthHandler}
 
 	// setup database
 	setup(pgdb)
@@ -65,7 +69,7 @@ func Test_Oauth(t *testing.T) {
 	// oauth/login GET
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "https://syncapod.com/oauth/login", nil)
-	testHandler.oauthHandler.Login(rec, req)
+	testHandler.router.ServeHTTP(rec, req)
 	body, err := io.ReadAll(rec.Body)
 	if err != nil {
 		t.Fatalf("Test_Oauth() GET login error: %v", err)
@@ -76,7 +80,7 @@ func Test_Oauth(t *testing.T) {
 	rec = httptest.NewRecorder()
 	req = httptest.NewRequest("POST", "https://syncapod.com/oauth/login", nil)
 	req.Form = url.Values{"uname": {"oauthTest"}, "pass": {"password"}, "redirect_uri": {"https://testuri.com"}}
-	testHandler.oauthHandler.Login(rec, req)
+	testHandler.router.ServeHTTP(rec, req)
 	body, err = io.ReadAll(rec.Body)
 	if err != nil {
 		t.Fatalf("Test_Oauth() POST login error: %v", err)
@@ -88,7 +92,7 @@ func Test_Oauth(t *testing.T) {
 	// oauth/authorize GET
 	rec = httptest.NewRecorder()
 	req = httptest.NewRequest("GET", uri, nil)
-	testHandler.oauthHandler.Authorize(rec, req)
+	testHandler.router.ServeHTTP(rec, req)
 	body, err = io.ReadAll(rec.Body)
 	if err != nil {
 		t.Fatalf("Test_Oauth() GET authorize error: %v", err)
@@ -98,7 +102,7 @@ func Test_Oauth(t *testing.T) {
 	// oauth/authorize POST
 	rec = httptest.NewRecorder()
 	req = httptest.NewRequest("POST", uri, nil)
-	testHandler.oauthHandler.Authorize(rec, req)
+	testHandler.router.ServeHTTP(rec, req)
 	res := rec.Result()
 	_, err = io.ReadAll(res.Body)
 	if err != nil {
@@ -129,7 +133,7 @@ func testOauthToken(t *testing.T, urlValues map[string]string) string {
 	req.SetBasicAuth("testClientID", "testClientSecret")
 	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Add("Content-Length", strconv.Itoa(len(vals.Encode())))
-	testHandler.oauthHandler.Token(rec, req)
+	testHandler.router.ServeHTTP(rec, req)
 
 	res := rec.Result()
 	require.Equal(t, 200, res.StatusCode)
@@ -147,31 +151,6 @@ func testOauthToken(t *testing.T, urlValues map[string]string) string {
 	require.NotEmpty(t, tRes.AccessToken)
 	require.NotEmpty(t, tRes.RefreshToken)
 	return tRes.RefreshToken
-}
-
-//func Test_HTTP(t *testing.T) {
-//	type args struct {
-//		method string
-//		url    string
-//	}
-//	tests := []struct {
-//		name         string
-//		args         args
-//		resultCode   int
-//		bodyContains string
-//	}{}
-//}
-
-func createTestOAuthHandler(authC *auth.AuthController) (*OauthHandler, error) {
-	loginT, err := template.ParseFiles("../../templates/oauth/login.gohtml")
-	if err != nil {
-		return nil, err
-	}
-	authT, err := template.ParseFiles("../../templates/oauth/auth.gohtml")
-	if err != nil {
-		return nil, err
-	}
-	return &OauthHandler{authC, loginT, authT, map[string]string{"testClientID": "testClientSecret"}, slog.Default()}, nil
 }
 
 func setup(pg *pgxpool.Pool) {

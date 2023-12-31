@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/sschwartz96/syncapod-backend/internal/auth"
 	protos "github.com/sschwartz96/syncapod-backend/internal/gen"
 	"github.com/sschwartz96/syncapod-backend/internal/podcast"
@@ -54,8 +55,16 @@ func CreateAlexaHandler(auth *auth.AuthController, podCon *podcast.PodController
 	}
 }
 
-// Alexa handles all requests through /api/alexa endpoint
-func (h *AlexaHandler) Alexa(res http.ResponseWriter, req *http.Request) {
+func (h *AlexaHandler) Routes() chi.Router {
+	router := chi.NewRouter()
+
+	router.Post("/", h.handler)
+
+	return router
+}
+
+// handler handles all requests through /api/handler endpoint
+func (h *AlexaHandler) handler(res http.ResponseWriter, req *http.Request) {
 	var resText, directive string
 
 	body, err := io.ReadAll(req.Body)
@@ -505,24 +514,6 @@ func (h *AlexaHandler) AudioEvent(res http.ResponseWriter, req *http.Request, bo
 		h.log.Error("error retrieving user, podcast, or episode item from token", util.Err(err))
 		return
 	}
-
-	// userID, err := uuid.Parse(uID)
-	// if err != nil {
-	// 	h.log.Error("error parsing user id", util.Err(err))
-	// 	return
-	// }
-	//
-	// podID, err := uuid.Parse(pID)
-	// if err != nil {
-	// 	h.log.Error("error parsing podcast id", util.Err(err))
-	// 	return
-	// }
-	//
-	// epiID, err := uuid.Parse(eID)
-	// if err != nil {
-	// 	h.log.Error("error parsing episode id", util.Err(err))
-	// 	return
-	// }
 
 	h.log.Debug("audio event",
 		slog.String("name", data.Event.Header.Name),

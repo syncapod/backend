@@ -10,8 +10,12 @@ db:
 	docker run -d --rm -ti --network host -e POSTGRES_PASSWORD=secret postgres
 
 migrate:
-	migrate -source file://migrations \
+	migrate -source file://db/migrations \
 		-database postgres://postgres:secret@localhost/postgres?sslmode=disable up
+
+migrate-down:
+	migrate -source file://db/migrations \
+		-database postgres://postgres:secret@localhost/postgres?sslmode=disable down
 
 run:
 	go run ./cmd/main.go

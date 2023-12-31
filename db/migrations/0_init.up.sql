@@ -1,7 +1,7 @@
 -- Extensions
 
 -- for uuid auto generation (EDIT NOT NEEDED)
--- CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 CREATE TABLE Users (
 	id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

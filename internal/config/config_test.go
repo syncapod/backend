@@ -31,6 +31,7 @@ var mockConfigObj = &Config{
 	Host:          "syncapod.com",
 	Production:    false,
 	MigrationsDir: "/syncapod/migrations",
+	TemplatesDir:  "./templates/",
 }
 
 func TestReadConfig(t *testing.T) {
