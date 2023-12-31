@@ -11,14 +11,13 @@ import (
 
 // Defaults
 const (
-	dbuserDefault          = "syncapod"
-	dbportDefault          = 5432
-	dbnameDefault          = "syncapod"
-	dbhostDefault          = "localhost"
-	migrationsDirDefault   = "/syncapod/migrations"
-	portDefault            = 3030
-	grpcPortDefault        = 50051
-	grpcGatewayPortDefault = 50052
+	dbuserDefault        = "syncapod"
+	dbportDefault        = 5432
+	dbnameDefault        = "syncapod"
+	dbhostDefault        = "localhost"
+	migrationsDirDefault = "/syncapod/migrations"
+	portDefault          = 3030
+	hostDefault          = "syncapod.com"
 )
 
 // Config holds variables for our server
@@ -29,13 +28,12 @@ type Config struct {
 	DbPort          int    `json:"db_port"` // env:PG_PORT
 	DbName          string `json:"db_name"` // env:PG_DB_NAME
 	MigrationsDir   string `json:"migrations_dir"`
+	Host            string `json:"host"`
 	Port            int    `json:"port"`
 	AlexaClientID   string `json:"alexa_client_id"`
 	AlexaSecret     string `json:"alexa_secret"`
 	ActionsClientID string `json:"actions_client_id"`
 	ActionsSecret   string `json:"actions_secret"`
-	GRPCPort        int    `json:"grpc_port"`
-	GRPCGatewayPort int    `json:"grpc_gateway_port"`
 	Production      bool   `json:"production"`
 	CertDir         string `json:"cert_dir"` // only used if production=true
 	Debug           bool   `json:"debug"`
@@ -44,14 +42,13 @@ type Config struct {
 // ReadConfig reads the config file encoded in JSON
 func ReadConfig(r io.Reader) (*Config, error) {
 	config := &Config{
-		DbUser:          dbuserDefault,
-		DbPort:          dbportDefault,
-		DbName:          dbnameDefault,
-		DbHost:          dbhostDefault,
-		MigrationsDir:   migrationsDirDefault,
-		Port:            portDefault,
-		GRPCPort:        grpcPortDefault,
-		GRPCGatewayPort: grpcGatewayPortDefault,
+		DbUser:        dbuserDefault,
+		DbPort:        dbportDefault,
+		DbName:        dbnameDefault,
+		DbHost:        dbhostDefault,
+		MigrationsDir: migrationsDirDefault,
+		Port:          portDefault,
+		Host:          hostDefault,
 	}
 	// Unmarshal into config var
 	err := json.NewDecoder(r).Decode(config)

@@ -147,8 +147,9 @@ func main() {
 		pod, err := rssController.AddNewPodcast("https://feeds.twit.tv/twit.xml", r)
 		if err != nil {
 			log.Error("failed to add debug podcast", util.Err(err))
+		} else {
+			log.Info("finished adding podcast", slog.Any("podID", pod.ID))
 		}
-		log.Info("finished adding podcast", slog.Any("podID", pod.ID))
 	}
 
 	// start server
@@ -170,5 +171,5 @@ func readConfig(path string) (*config.Config, error) {
 }
 
 func startServer(cfg *config.Config, h *handler.Handler) error {
-	return http.ListenAndServe(fmt.Sprintf(":%d", cfg.Port), h)
+	return http.ListenAndServe(fmt.Sprintf(":%d", cfg.Port), h.GetHandler())
 }

@@ -46,7 +46,7 @@ func CreateOauthHandler(authController *auth.AuthController, clients map[string]
 func (h *OauthHandler) ServeHTTP(res http.ResponseWriter, req *http.Request) {
 	// path: /oauth/*
 	var head string
-	head, req.URL.Path = ShiftPath(req.URL.Path)
+	head = ""
 	switch head {
 	case "login":
 		h.Login(res, req)

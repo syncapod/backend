@@ -20,3 +20,5 @@ config.json
 
 # tags for vim
 tags
+
+.vscode

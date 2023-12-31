@@ -11,28 +11,26 @@ import (
 const mockConfig = `{
 	"cert_dir": "/syncapod/cert",
 	"port": 8090,
-	"grpc_port": 50051,
-	"grpc_gateway_port": 50052,
 	"db_name": "syncapod",
 	"db_user": "syncapod",
 	"db_pass": "syncapod",
 	"db_host": "localhost",
 	"db_port": 5432,
-	"production": false
+	"production": false,
+	"MigrationsDir": "/syncapod/migrations"
 }`
 
 var mockConfigObj = &Config{
-	CertDir:         "/syncapod/cert",
-	Port:            8090,
-	GRPCPort:        50051,
-	GRPCGatewayPort: 50052,
-	DbName:          "syncapod",
-	DbUser:          "syncapod",
-	DbPass:          "syncapod",
-	DbHost:          "localhost",
-	DbPort:          5432,
-	Production:      false,
-	MigrationsDir:   "/syncapod/migrations",
+	CertDir:       "/syncapod/cert",
+	Port:          8090,
+	DbName:        "syncapod",
+	DbUser:        "syncapod",
+	DbPass:        "syncapod",
+	DbHost:        "localhost",
+	DbPort:        5432,
+	Host:          "syncapod.com",
+	Production:    false,
+	MigrationsDir: "/syncapod/migrations",
 }
 
 func TestReadConfig(t *testing.T) {
