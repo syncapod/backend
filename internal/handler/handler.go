@@ -22,15 +22,19 @@ type Handler struct {
 
 // CreateHandler sets up the main handler
 func CreateHandler(cfg *config.Config, authC *auth.AuthController, podCon *podcast.PodController, log *slog.Logger) (*Handler, error) {
-	router := chi.NewRouter()
-	syncapodRouter := chi.NewRouter()
-	mtaSTSRouter := chi.NewRouter()
 
+	// create chi routers (muxes)
+	router := chi.NewRouter()         // created all domains
+	syncapodRouter := chi.NewRouter() // created for the syncapod.com domain
+	mtaSTSRouter := chi.NewRouter()   // created for the mta-sts.syncapod.com domain
+
+	// create main handle
 	handler := &Handler{
 		router: router,
 		log:    log,
 	}
 
+	// create oauth handler
 	oauthHandler, err := CreateOauthHandler(
 		cfg,
 		authC,
@@ -44,8 +48,10 @@ func CreateHandler(cfg *config.Config, authC *auth.AuthController, podCon *podca
 		return nil, fmt.Errorf("CreateHandler() error creating oauthHandler: %v", err)
 	}
 
+	// create alexa handler
 	alexaHandler := CreateAlexaHandler(authC, podCon, log)
 
+	// middleware
 	httpLogger := httplog.NewLogger("syncapod")
 	httpLogger.Logger = log
 	router.Use(httplog.RequestLogger(httpLogger))
@@ -56,8 +62,7 @@ func CreateHandler(cfg *config.Config, authC *auth.AuthController, podCon *podca
 
 	router.Mount("/", hostRouter.Handler())
 
-	log.Info(fmt.Sprintf("mta-sts.%s", cfg.Host))
-
+	// syncapod routes
 	syncapodRouter.Get("/", func(res http.ResponseWriter, req *http.Request) {
 		log.Info("req.Host", slog.Any("req.Host", req.Host))
 		log.Info("req.Header.Get(\"Host\")", slog.Any("req.Header.Get(\"Host\")", req.Header.Get("Host")))
@@ -67,7 +72,10 @@ func CreateHandler(cfg *config.Config, authC *auth.AuthController, podCon *podca
 	syncapodRouter.Mount("/api/alexa", alexaHandler.Routes())
 	syncapodRouter.Mount("/api/actions", http.HandlerFunc(handler.actionsDebugHandler))
 
+	// mta.sts domain routes
 	mtaSTSRouter.Get("/.well-known/mta-sts.txt", mtaStsTxt)
+
+	// print the routes
 
 	return handler, nil
 }
