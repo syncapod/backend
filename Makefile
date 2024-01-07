@@ -13,7 +13,7 @@ db-rm:
 	docker rm -f syncapod-db
 
 wait-for-db:
-	@until docker exec syncapod-db pg_isready -d "postgresql://postgres:secret@localhost" >/dev/null 2>&1; do \
+	@until docker exec syncapod-db pg_isready -d "postgresql://postgres:secret@localhost" ; do \
 		echo "Waiting for PostgreSQL database..."; \
 		sleep 1; \
     done
