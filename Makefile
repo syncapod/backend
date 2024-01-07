@@ -6,8 +6,17 @@ endif
 
 .PHONY: db migrate run test testv test-db coverage protos
 
-db:
-	docker run -d --rm -ti --network host -e POSTGRES_PASSWORD=secret postgres
+db-start:
+	docker run --name syncapod-db -d --rm -ti --network host -e POSTGRES_PASSWORD=secret postgres
+
+db-rm:
+	docker rm -f syncapod-db
+
+wait-for-db:
+	@until docker exec syncapod-db pg_isready -d "postgresql://postgres:secret@localhost" >/dev/null 2>&1; do \
+		echo "Waiting for PostgreSQL database..."; \
+		sleep 1; \
+    done
 
 migrate:
 	migrate -source file://db/migrations \
@@ -16,6 +25,8 @@ migrate:
 migrate-down:
 	migrate -source file://db/migrations \
 		-database postgres://postgres:secret@localhost/postgres?sslmode=disable down
+
+db: db-start wait-for-db migrate
 
 run:
 	go run ./cmd/main.go
