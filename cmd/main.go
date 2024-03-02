@@ -10,9 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/golang-migrate/migrate/v4"
-	_ "github.com/golang-migrate/migrate/v4/database/postgres"
-	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/sschwartz96/syncapod-backend/internal/auth"
 	"github.com/sschwartz96/syncapod-backend/internal/config"
@@ -62,21 +59,6 @@ func main() {
 	}
 
 	queries := db.New(pgdb)
-
-	// run migrations
-	mig, err := migrate.New("file://"+cfg.MigrationsDir, pgURI)
-	if err != nil {
-		log.Error("could not create migrate struct", util.Err(err))
-		os.Exit(3)
-	}
-	err = mig.Up()
-	if err != nil && err.Error() != "no change" {
-		log.Error("could not run migrations", util.Err(err))
-	}
-
-	// setup stores
-	// oauthStore := db.NewOAuthStorePG(pgdb)
-	// podStore := db.NewPodcastStore(pgdb)
 
 	// setup controllers
 	authController := auth.NewAuthController(queries, log)
